@@ -1,6 +1,11 @@
 # Data Engineering (LTAT.02.007) Project 
 Designing and Implementing a Data Pipeline to Analyze Scientific Publications.
 
+## Local Ports
+- Airflow `http://localhost:8080/`
+- Postgres `http://localhost:5432/`
+- Neo4j `http://localhost:7474/`
+
 ## Usage Instructions
 - Make sure you have installed Docker Desktop (Windows).
 - If you are using Windows, consider using Git Bash or some other Unix type terminal.
@@ -21,8 +26,3 @@ Create an Admin user:
 
 ### Normal Setup
 `docker-compose up -d`
-
-## Local Ports
-- Airflow `http://localhost:8080/`
-- Postgres `http://localhost:5432/`
-- Neo4j `http://localhost:7474/`
