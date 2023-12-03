@@ -15,7 +15,7 @@ services:
   neo4j:
     image: neo4j:latest
     environment:
-      NEO4J_AUTH: project_user/project_pass123
+      NEO4J_AUTH: neo4j/project_pass123
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -26,7 +26,7 @@ services:
     image: apache/airflow:latest
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://project_user:project_pass123@postgres/project_dwh
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://project_user:project_pass123@postgres/project_dwh
       - AIRFLOW__CORE__FERNET_KEY=ZS7wH338QniBMWr5AI7ZHqhowEKW3vYXIr1uHpvc7ZY=
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
     ports:
@@ -36,6 +36,7 @@ services:
     depends_on:
       - postgres
       - neo4j
+    command: webserver
 
 volumes:
   postgres-data:
