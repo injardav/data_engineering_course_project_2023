@@ -1,0 +1,43 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: project_dwh
+      POSTGRES_USER: project_user
+      POSTGRES_PASSWORD: project_pass123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  neo4j:
+    image: neo4j:latest
+    environment:
+      NEO4J_AUTH: project_user/project_pass123
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j-data:/data
+
+  airflow-webserver:
+    image: apache/airflow:latest
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://project_user:project_pass123@postgres/project_dwh
+      - AIRFLOW__CORE__FERNET_KEY=ZS7wH338QniBMWr5AI7ZHqhowEKW3vYXIr1uHpvc7ZY=
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    ports:
+      - "8080:8080"
+    volumes:
+      - airflow-dags:/usr/local/airflow/dags
+    depends_on:
+      - postgres
+      - neo4j
+
+volumes:
+  postgres-data:
+  neo4j-data:
+  airflow-dags:
