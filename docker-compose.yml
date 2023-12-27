@@ -40,6 +40,7 @@ services:
     volumes:
       - ./kaggle.json:/home/airflow/.kaggle/kaggle.json
       - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/data:/opt/airflow/data
       - ./airflow/staging_area:/opt/airflow/staging_area
     command: webserver
     depends_on:
@@ -60,6 +61,7 @@ services:
     volumes:
       - ./kaggle.json:/home/airflow/.kaggle/kaggle.json
       - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/data:/opt/airflow/data
       - ./airflow/staging_area:/opt/airflow/staging_area
     command: scheduler
     depends_on:
