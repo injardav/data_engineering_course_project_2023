@@ -143,14 +143,15 @@ def transform_and_save_dataframe():
     output_path = '/opt/airflow/staging_area/arxiv_transformed.csv'
 
     if os.path.exists(file_path) and not os.path.exists(output_path):
+
         # df = pd.read_json(file_path, lines=True)
         # df = df.dropna(subset=['doi'])
         # df.reset_index(drop=True, inplace=True)
         # df.index += 1
         # df['id'] = df.index
+        ### COMMENT THIS BACK IN IF YOU WANT TO READ IN ENTIRE DATASET
 
         rows_with_doi = []
-
         with open(file_path, 'r') as file:
             for line in file:
                 row = json.loads(line)
