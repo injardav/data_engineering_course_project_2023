@@ -1,4 +1,4 @@
-import os, json, zipfile, pandas as pd
+import os, json, zipfile, requests, time, pandas as pd
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
@@ -29,6 +29,88 @@ def map_category(row, mapping):
     categories = row.split()
     return ' '.join(mapping.get(cat, cat) for cat in categories)
 
+def get_paper_info_from_crossref(doi):
+    base_url = f'https://api.crossref.org/works/{doi}'
+    user_agent = "Data_Engineering_course/1.0 (https://ut.ee; mailto:mahmouds@ut.ee)"
+    headers = {"User-Agent": user_agent}
+    logger.info(f"Calling CrossRef API with doi: {doi}")
+
+    try:
+        response = requests.get(base_url, headers=headers)
+        response.raise_for_status()
+        result = response.json()
+
+        if result['status'] == 'ok':
+            item = result["message"]
+            logger.info(f"Response from CrossRef: {str(item)}")
+
+            paper_info = {
+                "type": item.get('type', None),
+                "score": item.get('score', None),
+                "references_count": item.get('reference-count', None),
+                "references": item.get('reference', None),
+                "publisher": item.get('publisher', None),
+                "issue": item.get('issue', None),
+                "license": item.get('license', None),
+                "short_container_title": item.get('short-container-title', None),
+                "container_title": item.get('container-title', None),
+                "is_referenced_by_count": item.get('is-referenced-by-count', None),
+                "author": item.get('author', None),
+                "language": item.get('language', None),
+                "links": item.get('link', None),
+                "deposited": item.get('deposited', {}).get('date-time', None),
+                "ISSN": item.get('ISSN', None),
+                "ISSN_type": item.get('issn-type', None),
+                "article_number": item.get('article-number', None)
+            }
+
+            if 'license' in paper_info and isinstance(paper_info['license'], list) and paper_info['license']:
+                paper_info['license_start'] = paper_info['license'][0].get('start', {}).get('date-time', None)
+                paper_info['license_url'] = paper_info['license'][0].get('URL', None)
+                paper_info['license_content_version'] = paper_info['license'][0].get('content-version', None)
+                paper_info['license_delay'] = paper_info['license'][0].get('delay-in-days', None)
+
+            return paper_info
+        else:
+            logger.info("No results found.")
+            return None
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 429:  # Too Many Requests
+            wait_time = int(e.response.headers.get("Retry-After", 60))
+            logger.info(f"Rate limit reached, waiting for {wait_time} seconds")
+            time.sleep(wait_time)
+            return get_paper_info_from_crossref(doi)  # Recursive retry
+        else:
+            logger.error(f"HTTP error: {e}")
+            return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error: {e}")
+        return None
+
+def consume_crossref(df):
+    field_names = [
+        'type', 'score', 'references_count',
+        'reference_dois', 'reference_list', 'publisher', 'issue',
+        'license_start', 'license_url', 'license_content_version',
+        'license_delay', 'short_container_title', 'container_title',
+        'is_referenced_by_count', 'author', 'language', 'links',
+        'deposited', 'ISSN', 'ISSN_type', 'article_number'
+    ]
+    for field in field_names:
+        df[field] = None
+
+    temp_df = df.head(10).copy()
+
+    for index, row in temp_df.iterrows():
+        paper_info = get_paper_info_from_crossref(row['doi'])
+        if paper_info:
+            for field in field_names:
+                temp_df.at[index, field] = paper_info.get(field, None)
+                df.at[index, field] = paper_info.get(field, None)  # Update the original dataframe as well
+
+    # Save the temporary DataFrame (first 10 rows) to a CSV file or any other format
+    temp_df.to_csv('temp_dataframe.csv', index=False)
+
 def download_dataset():
     dataset_path = '/opt/airflow/dataset/arxiv.zip'
 
@@ -58,23 +140,36 @@ def transform_and_save_dataframe():
     file_path = '/opt/airflow/dataset/arxiv-metadata-oai-snapshot.json'
     output_path = '/opt/airflow/staging_area/arxiv_transformed.csv'
 
-    if os.path.exists(file_path):
-        df = pd.read_json(file_path, lines=True)
-        df = df.dropna(subset=['doi'])
+    if os.path.exists(file_path) and not os.path.exists(output_path):
+        # df = pd.read_json(file_path, lines=True)
+        # df = df.dropna(subset=['doi'])
+        # df.reset_index(drop=True, inplace=True)
+        # df.index += 1
+        # df['id'] = df.index
+
+        rows_with_doi = []
+
+        with open(file_path, 'r') as file:
+            for line in file:
+                row = json.loads(line)
+                if 'doi' in row and row['doi']:
+                    rows_with_doi.append(row)
+                    if len(rows_with_doi) == 10:
+                        break
+
+        df = pd.DataFrame(rows_with_doi)
         df.reset_index(drop=True, inplace=True)
         df.index += 1
         df['id'] = df.index
 
         # General Category mapping
-        logger.info("Starting general category mapping")
-        logger.info("First 10 unique 'categories' values:\n" + str(df['categories'].unique()[:10]))
-
         df['categories'] = df['categories'].apply(get_unique_categories)
         category_mapping = load_category_mapping('/opt/airflow/data/category_mapping.json')
         df['general_category'] = df['categories'].apply(lambda x: map_category(x, category_mapping))
         df.drop('categories', axis=1, inplace=True)
 
-        logger.info("First 10 'general_category' values:\n" + str(df['general_category'].unique()[:10]))
+        # Add Crossref data
+        consume_crossref(df)
 
         # Save the DataFrame to CSV
         df.to_csv(output_path, index=False)
