@@ -17,26 +17,26 @@ default_args = {
 }
 
 def download_dataset():
-    dataset_path = '/tmp/airflow/dataset/arxiv.zip'
+    dataset_path = '/opt/airflow/data/arxiv.zip'
 
     # Check if the dataset already exists
     if not os.path.exists(dataset_path):
         api = KaggleApi()
         api.authenticate()
-        api.dataset_download_files('Cornell-University/arxiv', path='/tmp/airflow/dataset/', unzip=False)
+        api.dataset_download_files('Cornell-University/arxiv', path='/opt/airflow/data/', unzip=False)
 
 def unzip_dataset():
-    dataset_path = '/tmp/airflow/dataset/arxiv.zip'
-    extracted_path = '/tmp/airflow/dataset/arxiv-metadata-oai-snapshot.json'
+    dataset_path = '/opt/airflow/data/arxiv.zip'
+    extracted_path = '/opt/airflow/data/arxiv-metadata-oai-snapshot.json'
 
     # Check if the dataset zip file exists and if the extracted file does not exist
     if os.path.exists(dataset_path) and not os.path.exists(extracted_path):
         with zipfile.ZipFile(dataset_path, 'r') as zip_ref:
-            zip_ref.extractall('/tmp/airflow/dataset/')
+            zip_ref.extractall('/opt/airflow/data/')
 
 def transform_and_save():
-    file_path = '/tmp/airflow/dataset/arxiv-metadata-oai-snapshot.json'
-    output_path = '/tmp/airflow/staging_area/arxiv_transformed.csv'
+    file_path = '/opt/airflow/data/arxiv-metadata-oai-snapshot.json'
+    output_path = '/opt/airflow/staging_area/arxiv_transformed.csv'
 
     if os.path.exists(file_path):
         df = pd.read_json(file_path, lines=True)

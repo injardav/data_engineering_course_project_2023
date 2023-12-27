@@ -30,6 +30,7 @@ services:
       dockerfile: Dockerfile
     container_name: airflow_webserver
     environment:
+      - AIRFLOW__WEBSERVER__SECRET_KEY=secret
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://project_user:project_pass123@postgres/project_dwh
       - AIRFLOW__CORE__FERNET_KEY=ZS7wH338QniBMWr5AI7ZHqhowEKW3vYXIr1uHpvc7ZY=
@@ -39,7 +40,7 @@ services:
     volumes:
       - ./kaggle.json:/home/airflow/.kaggle/kaggle.json
       - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/staging_area:/tmp/airflow/staging_area
+      - ./airflow/staging_area:/opt/airflow/staging_area
     command: webserver
     depends_on:
       - postgres
@@ -51,6 +52,7 @@ services:
       dockerfile: Dockerfile
     container_name: airflow_scheduler
     environment:
+      - AIRFLOW__WEBSERVER__SECRET_KEY=secret
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://project_user:project_pass123@postgres/project_dwh
       - AIRFLOW__CORE__FERNET_KEY=ZS7wH338QniBMWr5AI7ZHqhowEKW3vYXIr1uHpvc7ZY=
@@ -58,7 +60,7 @@ services:
     volumes:
       - ./kaggle.json:/home/airflow/.kaggle/kaggle.json
       - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/staging_area:/tmp/airflow/staging_area
+      - ./airflow/staging_area:/opt/airflow/staging_area
     command: scheduler
     depends_on:
       - postgres
