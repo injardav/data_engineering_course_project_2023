@@ -61,7 +61,9 @@ def get_paper_info_from_crossref(doi):
                 "deposited": item.get('deposited', {}).get('date-time', None),
                 "ISSN": item.get('ISSN', None),
                 "ISSN_type": item.get('issn-type', None),
-                "article_number": item.get('article-number', None)
+                "article_number": item.get('article-number', None),
+                "URLs": item.get('URL', None),
+                "subject": item.get('subject', None)
             }
 
             if 'license' in paper_info and isinstance(paper_info['license'], list) and paper_info['license']:
@@ -90,11 +92,11 @@ def get_paper_info_from_crossref(doi):
 def consume_crossref(df):
     field_names = [
         'type', 'score', 'references_count',
-        'reference_dois', 'reference_list', 'publisher', 'issue',
+        'references', 'publisher', 'issue',
         'license_start', 'license_url', 'license_content_version',
         'license_delay', 'short_container_title', 'container_title',
         'is_referenced_by_count', 'author', 'language', 'links',
-        'deposited', 'ISSN', 'ISSN_type', 'article_number'
+        'deposited', 'ISSN', 'ISSN_type', 'article_number', "URLs", "subject"
     ]
     for field in field_names:
         df[field] = None
