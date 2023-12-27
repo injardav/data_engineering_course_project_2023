@@ -25,8 +25,10 @@ services:
       - neo4j-data:/data
 
   airflow-webserver:
+    build: 
+      context: ./airflow
+      dockerfile: Dockerfile
     container_name: airflow_webserver
-    image: apache/airflow:latest
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://project_user:project_pass123@postgres/project_dwh
@@ -35,30 +37,28 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./scripts/entrypoint-wrapper.sh:/entrypoint-wrapper.sh:ro
-      - ./scripts/dependencies.sh:/dependencies.sh:ro
+      - ./kaggle.json:/home/airflow/.kaggle/kaggle.json
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/staging_area:/tmp/airflow/staging_area
-    entrypoint: ["/entrypoint-wrapper.sh"]
     command: webserver
     depends_on:
       - postgres
       - neo4j
 
   airflow-scheduler:
+    build: 
+      context: ./airflow
+      dockerfile: Dockerfile
     container_name: airflow_scheduler
-    image: apache/airflow:latest
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://project_user:project_pass123@postgres/project_dwh
       - AIRFLOW__CORE__FERNET_KEY=ZS7wH338QniBMWr5AI7ZHqhowEKW3vYXIr1uHpvc7ZY=
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
     volumes:
-      - ./scripts/entrypoint-wrapper.sh:/entrypoint-wrapper.sh:ro
-      - ./scripts/dependencies.sh:/dependencies.sh:ro
+      - ./kaggle.json:/home/airflow/.kaggle/kaggle.json
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/staging_area:/tmp/airflow/staging_area
-    entrypoint: ["/entrypoint-wrapper.sh"]
     command: scheduler
     depends_on:
       - postgres
