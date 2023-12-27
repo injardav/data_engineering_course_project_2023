@@ -1,6 +1,2 @@
 __pycache__/
-<<<<<<< HEAD
 /airflow/staging_area/
-=======
-/airflow/staging_area/
->>>>>>> bd67801 (add staging area to gitignore)
