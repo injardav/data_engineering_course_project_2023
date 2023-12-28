@@ -1,4 +1,5 @@
 import os, json, zipfile, requests, time, pandas as pd
+from scholarly import scholarly
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
@@ -55,7 +56,7 @@ def get_paper_info_from_crossref(doi):
                 "short_container_title": item.get('short-container-title', None),
                 "container_title": item.get('container-title', None),
                 "is_referenced_by_count": item.get('is-referenced-by-count', None),
-                "author": item.get('author', None),
+                "authors": item.get('author', None),
                 "language": item.get('language', None),
                 "links": item.get('link', None),
                 "deposited": item.get('deposited', {}).get('date-time', None),
@@ -95,7 +96,7 @@ def consume_crossref(df):
         'references', 'publisher', 'issue',
         'license_start', 'license_url', 'license_content_version',
         'license_delay', 'short_container_title', 'container_title',
-        'is_referenced_by_count', 'author', 'language', 'links',
+        'is_referenced_by_count', 'authors', 'language', 'links',
         'deposited', 'ISSN', 'ISSN_type', 'article_number', "URLs", "subject"
     ]
     for field in field_names:
@@ -112,6 +113,31 @@ def consume_crossref(df):
 
     # Save the temporary DataFrame (first 10 rows) to a CSV file or any other format
     temp_df.to_csv('temp_dataframe.csv', index=False)
+
+def consume_scholarly(df):
+    for index, row in df.iterrows():
+        updated_authors = []
+        for author in row['authors']:
+            full_name = f"{author['given']} {author['family']}"
+            
+            search_query = scholarly.search_author(full_name)
+            try:
+                author_info = next(search_query)
+            except StopIteration:
+                updated_authors.append(author)
+                continue
+            
+            updated_author = {
+                'given': author.get('given', ''),
+                'family': author.get('family', ''),
+                'sequence': author.get('sequence', ''),
+                'affiliation': author_info.get('affiliation', ''),
+                'scholar_id': author_info.get('scholar_id', ''),
+                'interests': author_info.get('interests', [])
+            }
+            updated_authors.append(updated_author)
+
+        df.at[index, 'authors'] = updated_authors
 
 def download_dataset():
     dataset_path = '/opt/airflow/dataset/arxiv.zip'
@@ -173,6 +199,9 @@ def transform_and_save_dataframe():
 
         # Add Crossref data
         consume_crossref(df)
+
+        # Add Scholarly data
+        consume_scholarly(df)
 
         # Save the DataFrame to CSV
         df.to_csv(output_path, index=False)
