@@ -89,6 +89,59 @@ def get_paper_info_from_crossref(doi):
     except requests.exceptions.RequestException as e:
         logger.error(f"Request error: {e}")
         return None
+    
+def consume_semantic_scholar(df):
+    def format_id(row):
+        """
+        Formats the ID based on whether it's an ArXiv ID or a DOI.
+        """
+        if pd.notna(row['id']):
+            return f"ARXIV:{row['id']}"
+        elif pd.notna(row['doi']):
+            return f"DOI:{row['doi']}"
+        else:
+            return None
+
+    def chunker(seq, size):
+        """
+        Divides the data into chunks of specified size.
+        """
+        return (seq[pos:pos + size] for pos in range(0, len(seq), size))
+
+    def fetch_papers(ids):
+        """
+        Fetches papers from Semantic Scholar API for given IDs.
+        """
+        response = requests.post(
+            'https://api.semanticscholar.org/graph/v1/paper/batch',
+            params={'fields': 'referenceCount,citationCount,title'},
+            json={'ids': ids}
+        )
+        return response.json()
+
+    # Format the IDs and drop rows without valid IDs
+    df['formatted_id'] = df.apply(format_id, axis=1)
+    df.dropna(subset=['formatted_id'], inplace=True)
+
+    # Initialize results
+    results = []
+
+    # Process in batches
+    for chunk in chunker(df['formatted_id'].tolist(), 100):
+        papers = fetch_papers(chunk)
+        results.extend(papers)
+
+        # Respect the API rate limit
+        time.sleep(5 * 60 / 100)  # 5 minutes for 100 requests
+
+    # Convert results to DataFrame and merge with original df
+    results_df = pd.DataFrame(results)
+    df = pd.merge(df, results_df, left_on='formatted_id', right_on='paperId', how='left')
+
+    # Drop the 'formatted_id' column as it's no longer needed
+    df.drop(columns=['formatted_id'], inplace=True)
+
+    # Now df is updated with the results
 
 def consume_crossref(df):
     field_names = [
@@ -171,25 +224,19 @@ def transform_and_save_dataframe():
     if os.path.exists(file_path) and not os.path.exists(output_path):
 
         # df = pd.read_json(file_path, lines=True)
-        # df = df.dropna(subset=['doi'])
-        # df.reset_index(drop=True, inplace=True)
-        # df.index += 1
-        # df['id'] = df.index
+        # df = df.dropna(subset=['id', 'doi'], how='all')
         ### COMMENT THIS BACK IN IF YOU WANT TO READ IN ENTIRE DATASET
 
         rows_with_doi = []
         with open(file_path, 'r') as file:
             for line in file:
                 row = json.loads(line)
-                if 'doi' in row and row['doi']:
+                if ('doi' in row and row['doi']) and ('id' in row and row['id']):
                     rows_with_doi.append(row)
                     if len(rows_with_doi) == 10:
                         break
 
         df = pd.DataFrame(rows_with_doi)
-        df.reset_index(drop=True, inplace=True)
-        df.index += 1
-        df['id'] = df.index
 
         # General Category mapping
         df['categories'] = df['categories'].apply(get_unique_categories)
@@ -197,11 +244,14 @@ def transform_and_save_dataframe():
         df['general_category'] = df['categories'].apply(lambda x: map_category(x, category_mapping))
         df.drop('categories', axis=1, inplace=True)
 
-        # Add Crossref data
-        consume_crossref(df)
+        # # Add Crossref data
+        # consume_crossref(df)
 
-        # Add Scholarly data
-        consume_scholarly(df)
+        # # Add Scholarly data
+        # consume_scholarly(df)
+
+        # Add data from Semantic Scholar
+        consume_semantic_scholar(df)
 
         # Save the DataFrame to CSV
         df.to_csv(output_path, index=False)
