@@ -1,0 +1,73 @@
+Fact Tables:
+-------------
+Publication_Fact:
+id (Primary Key)
+reference_count
+score
+doi (Foreign Key referencing Dim_Publication)
+
+
+
+
+Dimension Tables:
+-----------------
+
+*Dim_Publication:
+pid (Primary Key)
+submitter
+article_number
+title
+journal_ref
+general_category
+type
+issue
+language
+short_container_title
+container_title
+is_referenced_by_count (current value)
+is_current (boolean indicating if the record is current)
+start_date (date/time indicating when the record became effective)
+end_date (date/time indicating when the record is no longer effective)
+
+*Dim_Authors:
+
+aid (Primary Key)
+aff_id (Foreign Key referencing Dim_Author_Affiliation)
+first_name
+family_name
+
+
+*Dim_Author_Affiliation:
+aff_id (Primary Key)
+affiliation
+is_current
+start_date
+end_date
+
+*Dim_Publisher:
+pub_id (Primary Key)
+publisher_name
+
+
+*Dim_Publish_SN:
+pid (Primary Key, Foreign Key referencing Dim_Publication)
+issn_number
+issn_type
+
+*Dim_License:
+lid (Primary Key)
+license_start (datetime)
+license_url
+license_content_version
+license_delay
+
+*Dim_References:
+pid (Primary Key, Foreign Key referencing Dim_Publication)
+doi
+key
+doi_asserted_by
+
+*Dim_Pub_Version:
+pid (Primary Key, Foreign Key referencing Dim_Publication)
+vid
+created_time
