@@ -87,7 +87,6 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
       - ./logstash/pipeline:/usr/share/logstash/pipeline
       - ./airflow/logs:/airflow_logs
     depends_on:
