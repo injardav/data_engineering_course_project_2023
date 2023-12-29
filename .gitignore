@@ -1,2 +1,4 @@
 __pycache__/
 /airflow/staging_area/*
+/airflow/logs/*
+/elasticsearch-data/*
