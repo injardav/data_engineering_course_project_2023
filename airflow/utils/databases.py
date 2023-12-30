@@ -20,7 +20,6 @@ class Neo4jConnector:
             return result
 
 def process_batch(df_batch, neo4j_connector):
-    # Prepare data for UNWIND
     batch_data = df_batch.to_dict('records')
     author_uuids = {}
     authors_data = []

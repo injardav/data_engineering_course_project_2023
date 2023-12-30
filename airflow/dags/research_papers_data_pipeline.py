@@ -2,7 +2,7 @@ import os, zipfile
 from datetime import datetime, timedelta
 from airflow import DAG
 from utils.utils import load_dataset, map_general_categories, handle_id, handle_authors
-from utils.api import consume_crossref, consume_semantic_scholar
+from utils.api import consume_crossref
 from utils.databases import insert_into_neo4j
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
@@ -55,15 +55,8 @@ def transform_and_save_dataframe():
         handle_id(df)
         handle_authors(df)
         map_general_categories(df, logger)
-
-        # # Add Crossref data
         consume_crossref(df, logger)
 
-        # Add data from Semantic Scholar
-        # consume_semantic_scholar(df, logger)
-
-        # Save the DataFrame to CSV
-        # df.to_csv(output_path, index=False)
         df.to_json(output_path, orient='records', lines=True)
         logger.info(f"DataFrame saved to {output_path}")
     else:
