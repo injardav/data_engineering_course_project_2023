@@ -73,4 +73,4 @@ with DAG('download_transform_arxiv_data', default_args=default_args, description
     t3 = PythonOperator(task_id='transform_and_save_dataframe', python_callable=transform_and_save_dataframe)
     t4 = PythonOperator(task_id='insert_into_neo4j', python_callable=insert_into_neo4j)
 
-    t1 >> t2 >> t3
+    t1 >> t2 >> t3 >> t4

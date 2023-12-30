@@ -1,5 +1,4 @@
-import uuid
-from datetime import datetime
+import uuid, os, pandas as pd
 from neo4j import GraphDatabase
 
 class Neo4jConnector:
@@ -165,12 +164,16 @@ def process_batch(df_batch, neo4j_connector):
     # Execute the query
     neo4j_connector.execute_query(query, {'batch': batch_data, 'authors_data': authors_data, 'references_data': references_data, 'versions_data': versions_data})
 
-def insert_into_neo4j(df, batch_size=100):
+def insert_into_neo4j(batch_size=100):
     NEO4J_URI = "bolt://neo4j:7687"
     NEO4J_USER = "neo4j"
     NEO4J_PASSWORD = "project_pass123"
 
-    with Neo4jConnector(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD) as neo4j_connector:
-        for start in range(0, len(df), batch_size):
-            df_batch = df.iloc[start:start+batch_size]
-            process_batch(df_batch, neo4j_connector)
+    input_path = '/opt/airflow/staging_area/arxiv_transformed.csv'
+    
+    if os.path.exists(input_path):
+        df = pd.read_csv(input_path)
+        with Neo4jConnector(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD) as neo4j_connector:
+            for start in range(0, len(df), batch_size):
+                df_batch = df.iloc[start:start+batch_size]
+                process_batch(df_batch, neo4j_connector)
