@@ -1,4 +1,4 @@
-import requests, time, pandas as pd
+import requests, time, json, pandas as pd
 
 def get_paper_info_from_crossref(doi, logger):
     base_url = f'https://api.crossref.org/works/{doi}'
@@ -67,7 +67,7 @@ def consume_crossref(df, logger):
         'license_start', 'license_url', 'license_content_version',
         'license_delay', 'short_container_title', 'container_title',
         'is_referenced_by_count', 'authors', 'language', 'links',
-        'deposited', 'ISSN', 'ISSN_type', 'article_number', "URLs", "subject"
+        'deposited', 'ISSN', 'ISSN_type', 'article_number', 'URLs', 'subject'
     ]
     for field in field_names:
         df[field] = None
@@ -76,11 +76,7 @@ def consume_crossref(df, logger):
         paper_info = get_paper_info_from_crossref(row['doi'], logger)
         if paper_info:
             for field in field_names:
-                new_value = paper_info.get(field, None)
-            
-                # Check if the new value is not None and not an empty string
-                if new_value is not None and new_value != '':
-                    df.at[index, field] = new_value
+                df.at[index, field] = paper_info.get(field, None)
 
 def consume_semantic_scholar(df, logger):
     def format_id(row):
@@ -109,7 +105,7 @@ def consume_semantic_scholar(df, logger):
             params={'fields': 'referenceCount,citationCount,title'},
             json={'ids': ids}
         )
-        return response.json()
+        return json.dumps(response.json())
 
     # Format the IDs and drop rows without valid IDs
     df['formatted_id'] = df.apply(format_id, axis=1)

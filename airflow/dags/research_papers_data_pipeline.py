@@ -2,7 +2,7 @@ import os, zipfile
 from datetime import datetime, timedelta
 from airflow import DAG
 from utils.utils import *
-from utils.api import consume_crossref
+from utils.api import consume_crossref, consume_semantic_scholar
 from utils.databases import insert_into_neo4j
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
@@ -54,7 +54,7 @@ def transform_and_save_dataframe():
         return
 
     # total_rows = get_total_rows(file_path)
-    total_rows = 50
+    total_rows = 500
     rows_per_subset = total_rows // 4
 
     for part in range(4):
@@ -67,6 +67,7 @@ def transform_and_save_dataframe():
         handle_authors(df)
         map_general_categories(df, logger)
         consume_crossref(df, logger)
+        # consume_semantic_scholar(df, logger)
 
         # Save the processed subset
         output_path = f"{base_output_path}{part}.json"
@@ -74,9 +75,9 @@ def transform_and_save_dataframe():
         logger.info(f"Subset {part} of DataFrame saved to {output_path}")
 
 with DAG('download_transform_arxiv_data', default_args=default_args, description='DAG to download, transform and save arxiv dataset', schedule_interval=timedelta(days=1), catchup=False) as dag:
-    t1 = PythonOperator(task_id='download_dataset', python_callable=download_dataset)
-    t2 = PythonOperator(task_id='unzip_dataset', python_callable=unzip_dataset)
-    t3 = PythonOperator(task_id='transform_and_save_dataframe', python_callable=transform_and_save_dataframe)
-    t4 = PythonOperator(task_id='insert_into_neo4j', python_callable=insert_into_neo4j)
+    t1 = PythonOperator(task_id='download_dataset', python_callable=download_dataset, provide_context=True)
+    t2 = PythonOperator(task_id='unzip_dataset', python_callable=unzip_dataset, provide_context=True)
+    t3 = PythonOperator(task_id='transform_and_save_dataframe', python_callable=transform_and_save_dataframe, provide_context=True)
+    t4 = PythonOperator(task_id='insert_into_neo4j', python_callable=insert_into_neo4j, provide_context=True)
 
     t1 >> t2 >> t3 >> t4
