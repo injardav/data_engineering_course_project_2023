@@ -199,11 +199,14 @@ def insert_into_neo4j(batch_size=5):
     NEO4J_USER = "neo4j"
     NEO4J_PASSWORD = "project_pass123"
 
-    input_path = '/opt/airflow/staging_area/arxiv_transformed.json'
-    
-    if os.path.exists(input_path):
-        df = pd.read_json(input_path, orient='records', lines=True)
-        with Neo4jConnector(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD) as neo4j_connector:
-            for start in range(0, len(df), batch_size):
-                df_batch = df.iloc[start:start+batch_size]
-                process_batch(df_batch, neo4j_connector)
+    base_input_path = '/opt/airflow/staging_area/arxiv_transformed_part_'
+    part_count = 4
+
+    with Neo4jConnector(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD) as neo4j_connector:
+        for part in range(part_count):
+            input_path = f"{base_input_path}{part}.json"
+            if os.path.exists(input_path):
+                df = pd.read_json(input_path, orient='records', lines=True)
+                for start in range(0, len(df), batch_size):
+                    df_batch = df.iloc[start:start + batch_size]
+                    process_batch(df_batch, neo4j_connector)

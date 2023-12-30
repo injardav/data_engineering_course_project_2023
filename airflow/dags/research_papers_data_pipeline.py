@@ -1,7 +1,7 @@
 import os, zipfile
 from datetime import datetime, timedelta
 from airflow import DAG
-from utils.utils import load_dataset, map_general_categories, handle_id, handle_authors
+from utils.utils import *
 from utils.api import consume_crossref
 from utils.databases import insert_into_neo4j
 from airflow.operators.python_operator import PythonOperator
@@ -47,20 +47,31 @@ def unzip_dataset():
 
 def transform_and_save_dataframe():
     file_path = '/opt/airflow/dataset/arxiv-metadata-oai-snapshot.json'
-    output_path = '/opt/airflow/staging_area/arxiv_transformed.json'
+    base_output_path = '/opt/airflow/staging_area/arxiv_transformed_part_'
+    
+    if not os.path.exists(file_path):
+        logger.info(f"File {file_path} does not exist. Operation skipped.")
+        return
 
-    if os.path.exists(file_path) and not os.path.exists(output_path):
+    # total_rows = get_total_rows(file_path)
+    total_rows = 50
+    rows_per_subset = total_rows // 4
 
-        df = load_dataset(file_path, subset=True, rows=50)
+    for part in range(4):
+        # Load a subset of the dataset
+        subset_start_row = part * rows_per_subset
+        df = load_dataset(file_path, subset=True, start_row=subset_start_row, rows=rows_per_subset)
+        
+        # Process the DataFrame
         handle_id(df)
         handle_authors(df)
         map_general_categories(df, logger)
         consume_crossref(df, logger)
 
+        # Save the processed subset
+        output_path = f"{base_output_path}{part}.json"
         df.to_json(output_path, orient='records', lines=True)
-        logger.info(f"DataFrame saved to {output_path}")
-    else:
-        logger.info(f"File {file_path} does not exist. Transformation and save operation skipped.")
+        logger.info(f"Subset {part} of DataFrame saved to {output_path}")
 
 with DAG('download_transform_arxiv_data', default_args=default_args, description='DAG to download, transform and save arxiv dataset', schedule_interval=timedelta(days=1), catchup=False) as dag:
     t1 = PythonOperator(task_id='download_dataset', python_callable=download_dataset)
