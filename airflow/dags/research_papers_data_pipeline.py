@@ -1,7 +1,7 @@
-import os, zipfile, requests, time, pandas as pd
+import os, zipfile
 from datetime import datetime, timedelta
 from airflow import DAG
-from utils.utils import load_dataset, map_general_categories, handle_id
+from utils.utils import load_dataset, map_general_categories, handle_id, handle_authors
 from utils.api import consume_crossref, consume_semantic_scholar
 from utils.databases import insert_into_neo4j
 from airflow.operators.python_operator import PythonOperator
@@ -47,12 +47,13 @@ def unzip_dataset():
 
 def transform_and_save_dataframe():
     file_path = '/opt/airflow/dataset/arxiv-metadata-oai-snapshot.json'
-    output_path = '/opt/airflow/staging_area/arxiv_transformed.csv'
+    output_path = '/opt/airflow/staging_area/arxiv_transformed.json'
 
     if os.path.exists(file_path) and not os.path.exists(output_path):
 
-        df = load_dataset(file_path, subset=True)
+        df = load_dataset(file_path, subset=True, rows=50)
         handle_id(df)
+        handle_authors(df)
         map_general_categories(df, logger)
 
         # # Add Crossref data
@@ -62,7 +63,8 @@ def transform_and_save_dataframe():
         # consume_semantic_scholar(df, logger)
 
         # Save the DataFrame to CSV
-        df.to_csv(output_path, index=False)
+        # df.to_csv(output_path, index=False)
+        df.to_json(output_path, orient='records', lines=True)
         logger.info(f"DataFrame saved to {output_path}")
     else:
         logger.info(f"File {file_path} does not exist. Transformation and save operation skipped.")

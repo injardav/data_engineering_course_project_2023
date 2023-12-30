@@ -72,17 +72,15 @@ def consume_crossref(df, logger):
     for field in field_names:
         df[field] = None
 
-    temp_df = df.head(10).copy()
-
-    for index, row in temp_df.iterrows():
+    for index, row in df.iterrows():
         paper_info = get_paper_info_from_crossref(row['doi'], logger)
         if paper_info:
             for field in field_names:
-                temp_df.at[index, field] = paper_info.get(field, None)
-                df.at[index, field] = paper_info.get(field, None)  # Update the original dataframe as well
-
-    # Save the temporary DataFrame (first 10 rows) to a CSV file or any other format
-    temp_df.to_csv('/opt/airflow/staging_area/temp_dataframe.csv', index=False)
+                new_value = paper_info.get(field, None)
+            
+                # Check if the new value is not None and not an empty string
+                if new_value is not None and new_value != '':
+                    df.at[index, field] = new_value
 
 def consume_semantic_scholar(df, logger):
     def format_id(row):

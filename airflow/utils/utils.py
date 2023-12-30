@@ -45,3 +45,9 @@ def handle_id(df):
     """
     df.rename(columns={'id': 'arxiv'}, inplace=True)
     df['id'] = [str(uuid.uuid4()) for _ in range(len(df))]
+
+def handle_authors(df):
+    """
+    Change all empty authors values to empty list for later parsing
+    """
+    df['authors'] = df['authors'].apply(lambda x: [] if pd.isna(x) or x.strip() == '' else x)
