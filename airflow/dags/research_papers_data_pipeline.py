@@ -1,7 +1,9 @@
-import os, json, zipfile, requests, time, pandas as pd
-from scholarly import scholarly
+import os, zipfile, requests, time, pandas as pd
 from datetime import datetime, timedelta
 from airflow import DAG
+from utils.utils import load_dataset, map_general_categories, handle_id
+from utils.api import consume_crossref, consume_semantic_scholar
+from utils.databases import insert_into_neo4j
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
 from kaggle.api.kaggle_api_extended import KaggleApi
@@ -18,189 +20,15 @@ default_args = {
 
 logger = LoggingMixin().log
 
-def get_unique_categories(row):
-    return ' '.join(sorted(set(row.split())))
-
-def load_category_mapping(file_path):
-    logger.info("Loading category mapping json")
-    with open(file_path, 'r') as file:
-        return json.load(file)
-    
-def map_category(row, mapping):
-    categories = row.split()
-    return ' '.join(mapping.get(cat, cat) for cat in categories)
-
-def get_paper_info_from_crossref(doi):
-    base_url = f'https://api.crossref.org/works/{doi}'
-    user_agent = "Data_Engineering_course/1.0 (https://ut.ee; mailto:mahmouds@ut.ee)"
-    headers = {"User-Agent": user_agent}
-    logger.info(f"Calling CrossRef API with doi: {doi}")
-
-    try:
-        response = requests.get(base_url, headers=headers)
-        response.raise_for_status()
-        result = response.json()
-
-        if result['status'] == 'ok':
-            item = result["message"]
-            logger.info(f"Response from CrossRef: {str(item)}")
-
-            paper_info = {
-                "type": item.get('type', None),
-                "score": item.get('score', None),
-                "references_count": item.get('reference-count', None),
-                "references": item.get('reference', None),
-                "publisher": item.get('publisher', None),
-                "issue": item.get('issue', None),
-                "license": item.get('license', None),
-                "short_container_title": item.get('short-container-title', None),
-                "container_title": item.get('container-title', None),
-                "is_referenced_by_count": item.get('is-referenced-by-count', None),
-                "authors": item.get('author', None),
-                "language": item.get('language', None),
-                "links": item.get('link', None),
-                "deposited": item.get('deposited', {}).get('date-time', None),
-                "ISSN": item.get('ISSN', None),
-                "ISSN_type": item.get('issn-type', None),
-                "article_number": item.get('article-number', None),
-                "URLs": item.get('URL', None),
-                "subject": item.get('subject', None)
-            }
-
-            if 'license' in paper_info and isinstance(paper_info['license'], list) and paper_info['license']:
-                paper_info['license_start'] = paper_info['license'][0].get('start', {}).get('date-time', None)
-                paper_info['license_url'] = paper_info['license'][0].get('URL', None)
-                paper_info['license_content_version'] = paper_info['license'][0].get('content-version', None)
-                paper_info['license_delay'] = paper_info['license'][0].get('delay-in-days', None)
-
-            return paper_info
-        else:
-            logger.info("No results found.")
-            return None
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 429:  # Too Many Requests
-            wait_time = int(e.response.headers.get("Retry-After", 60))
-            logger.info(f"Rate limit reached, waiting for {wait_time} seconds")
-            time.sleep(wait_time)
-            return get_paper_info_from_crossref(doi)  # Recursive retry
-        else:
-            logger.error(f"HTTP error: {e}")
-            return None
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request error: {e}")
-        return None
-    
-def consume_semantic_scholar(df):
-    def format_id(row):
-        """
-        Formats the ID based on whether it's an ArXiv ID or a DOI.
-        """
-        if pd.notna(row['id']):
-            return f"ARXIV:{row['id']}"
-        elif pd.notna(row['doi']):
-            return f"DOI:{row['doi']}"
-        else:
-            return None
-
-    def chunker(seq, size):
-        """
-        Divides the data into chunks of specified size.
-        """
-        return (seq[pos:pos + size] for pos in range(0, len(seq), size))
-
-    def fetch_papers(ids):
-        """
-        Fetches papers from Semantic Scholar API for given IDs.
-        """
-        response = requests.post(
-            'https://api.semanticscholar.org/graph/v1/paper/batch',
-            params={'fields': 'referenceCount,citationCount,title'},
-            json={'ids': ids}
-        )
-        return response.json()
-
-    # Format the IDs and drop rows without valid IDs
-    df['formatted_id'] = df.apply(format_id, axis=1)
-    df.dropna(subset=['formatted_id'], inplace=True)
-
-    # Initialize results
-    results = []
-
-    # Process in batches
-    for chunk in chunker(df['formatted_id'].tolist(), 100):
-        papers = fetch_papers(chunk)
-        results.extend(papers)
-
-        # Respect the API rate limit
-        time.sleep(5 * 60 / 100)  # 5 minutes for 100 requests
-
-    # Convert results to DataFrame and merge with original df
-    results_df = pd.DataFrame(results)
-    df = pd.merge(df, results_df, left_on='formatted_id', right_on='paperId', how='left')
-
-    # Drop the 'formatted_id' column as it's no longer needed
-    df.drop(columns=['formatted_id'], inplace=True)
-
-    # Now df is updated with the results
-
-def consume_crossref(df):
-    field_names = [
-        'type', 'score', 'references_count',
-        'references', 'publisher', 'issue',
-        'license_start', 'license_url', 'license_content_version',
-        'license_delay', 'short_container_title', 'container_title',
-        'is_referenced_by_count', 'authors', 'language', 'links',
-        'deposited', 'ISSN', 'ISSN_type', 'article_number', "URLs", "subject"
-    ]
-    for field in field_names:
-        df[field] = None
-
-    temp_df = df.head(10).copy()
-
-    for index, row in temp_df.iterrows():
-        paper_info = get_paper_info_from_crossref(row['doi'])
-        if paper_info:
-            for field in field_names:
-                temp_df.at[index, field] = paper_info.get(field, None)
-                df.at[index, field] = paper_info.get(field, None)  # Update the original dataframe as well
-
-    # Save the temporary DataFrame (first 10 rows) to a CSV file or any other format
-    temp_df.to_csv('temp_dataframe.csv', index=False)
-
-def consume_scholarly(df):
-    for index, row in df.iterrows():
-        updated_authors = []
-        for author in row['authors']:
-            full_name = f"{author['given']} {author['family']}"
-            
-            search_query = scholarly.search_author(full_name)
-            try:
-                author_info = next(search_query)
-            except StopIteration:
-                updated_authors.append(author)
-                continue
-            
-            updated_author = {
-                'given': author.get('given', ''),
-                'family': author.get('family', ''),
-                'sequence': author.get('sequence', ''),
-                'affiliation': author_info.get('affiliation', ''),
-                'scholar_id': author_info.get('scholar_id', ''),
-                'interests': author_info.get('interests', [])
-            }
-            updated_authors.append(updated_author)
-
-        df.at[index, 'authors'] = updated_authors
-
 def download_dataset():
     dataset_path = '/opt/airflow/dataset/arxiv.zip'
 
     if not os.path.exists(dataset_path):
         try:
             logger.info("Dataset did not exist, attempting to download")
-            api = KaggleApi()
-            api.authenticate()
-            api.dataset_download_files('Cornell-University/arxiv', path='/opt/airflow/dataset/', unzip=False)
+            kaggle_api = KaggleApi()
+            kaggle_api.authenticate()
+            kaggle_api.dataset_download_files('Cornell-University/arxiv', path='/opt/airflow/dataset/', unzip=False)
         except Exception as e:
             logger.error(f"Failed to download dataset: {e}")
             raise
@@ -223,35 +51,15 @@ def transform_and_save_dataframe():
 
     if os.path.exists(file_path) and not os.path.exists(output_path):
 
-        # df = pd.read_json(file_path, lines=True)
-        # df = df.dropna(subset=['id', 'doi'], how='all')
-        ### COMMENT THIS BACK IN IF YOU WANT TO READ IN ENTIRE DATASET
-
-        rows_with_doi = []
-        with open(file_path, 'r') as file:
-            for line in file:
-                row = json.loads(line)
-                if ('doi' in row and row['doi']) and ('id' in row and row['id']):
-                    rows_with_doi.append(row)
-                    if len(rows_with_doi) == 10:
-                        break
-
-        df = pd.DataFrame(rows_with_doi)
-
-        # General Category mapping
-        df['categories'] = df['categories'].apply(get_unique_categories)
-        category_mapping = load_category_mapping('/opt/airflow/data/category_mapping.json')
-        df['general_category'] = df['categories'].apply(lambda x: map_category(x, category_mapping))
-        df.drop('categories', axis=1, inplace=True)
+        df = load_dataset(file_path, subset=True)
+        handle_id(df)
+        map_general_categories(df, logger)
 
         # # Add Crossref data
-        # consume_crossref(df)
-
-        # # Add Scholarly data
-        # consume_scholarly(df)
+        consume_crossref(df, logger)
 
         # Add data from Semantic Scholar
-        consume_semantic_scholar(df)
+        # consume_semantic_scholar(df, logger)
 
         # Save the DataFrame to CSV
         df.to_csv(output_path, index=False)
@@ -259,27 +67,10 @@ def transform_and_save_dataframe():
     else:
         logger.info(f"File {file_path} does not exist. Transformation and save operation skipped.")
 
-with DAG(
-    'download_transform_arxiv_data',
-    default_args=default_args,
-    description='DAG to download, transform and save arxiv dataset',
-    schedule_interval=timedelta(days=1),
-    catchup=False
-) as dag:
-
-    t1 = PythonOperator(
-        task_id='download_dataset',
-        python_callable=download_dataset,
-    )
-
-    t2 = PythonOperator(
-        task_id='unzip_dataset',
-        python_callable=unzip_dataset,
-    )
-
-    t3 = PythonOperator(
-        task_id='transform_and_save_dataframe',
-        python_callable=transform_and_save_dataframe,
-    )
+with DAG('download_transform_arxiv_data', default_args=default_args, description='DAG to download, transform and save arxiv dataset', schedule_interval=timedelta(days=1), catchup=False) as dag:
+    t1 = PythonOperator(task_id='download_dataset', python_callable=download_dataset)
+    t2 = PythonOperator(task_id='unzip_dataset', python_callable=unzip_dataset)
+    t3 = PythonOperator(task_id='transform_and_save_dataframe', python_callable=transform_and_save_dataframe)
+    t4 = PythonOperator(task_id='insert_into_neo4j', python_callable=insert_into_neo4j)
 
     t1 >> t2 >> t3

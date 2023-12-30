@@ -35,6 +35,7 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://project_user:project_pass123@postgres/project_dwh
       - AIRFLOW__CORE__FERNET_KEY=ZS7wH338QniBMWr5AI7ZHqhowEKW3vYXIr1uHpvc7ZY=
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - PYTHONPATH=/opt/airflow:$PYTHONPATH
     ports:
       - "8080:8080"
     volumes:
@@ -43,6 +44,7 @@ services:
       - ./airflow/data:/opt/airflow/data
       - ./airflow/staging_area:/opt/airflow/staging_area
       - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/utils:/opt/airflow/utils
     command: webserver
     depends_on:
       - postgres
@@ -59,12 +61,14 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://project_user:project_pass123@postgres/project_dwh
       - AIRFLOW__CORE__FERNET_KEY=ZS7wH338QniBMWr5AI7ZHqhowEKW3vYXIr1uHpvc7ZY=
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - PYTHONPATH=/opt/airflow:$PYTHONPATH
     volumes:
       - ./kaggle.json:/home/airflow/.kaggle/kaggle.json
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/data:/opt/airflow/data
       - ./airflow/staging_area:/opt/airflow/staging_area
       - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/utils:/opt/airflow/utils
     command: scheduler
     depends_on:
       - postgres
