@@ -22,7 +22,7 @@ with DAG('insert_into_postgres_stage_4',
 
     wait_for_enrich_dataset = ExternalTaskSensor(
         task_id='wait_for_enrich_dataset',
-        external_dag_id='enrich_arxiv_data',
+        external_dag_id='enrich_stage_3',
         external_task_id='enrich_dataset',  # Waiting for this task to complete
         timeout=60 * 60 * 24 * 8,  # 1 week
         poke_interval=30

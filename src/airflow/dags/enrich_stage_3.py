@@ -25,7 +25,7 @@ with DAG('enrich_stage_3',
 
     wait_for_clean_and_validate = ExternalTaskSensor(
         task_id='wait_for_clean_and_validate',
-        external_dag_id='clean_and_validate_arxiv_data',
+        external_dag_id='clean_and_validate_stage_2',
         external_task_id='delete_json_file',  # Waiting for this task to complete
         timeout=60 * 60 * 24 * 8,  # 1 week,
         poke_interval=30
