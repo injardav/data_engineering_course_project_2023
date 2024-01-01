@@ -45,6 +45,7 @@ services:
       - ./airflow/staging_area:/opt/airflow/staging_area
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/utils:/opt/airflow/utils
+      - ./airflow/databases/cypher_queries:/opt/airflow/cypher_queries
     command: webserver
     depends_on:
       - postgres
@@ -69,6 +70,7 @@ services:
       - ./airflow/staging_area:/opt/airflow/staging_area
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/utils:/opt/airflow/utils
+      - ./airflow/databases/cypher_queries:/opt/airflow/cypher_queries
     command: scheduler
     depends_on:
       - postgres

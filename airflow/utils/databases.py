@@ -24,6 +24,18 @@ class Neo4jConnector:
         with self._driver.session() as session:
             session.run(create_index_query)
 
+    def execute_file(self, file_path):
+        with open(file_path, 'r') as file:
+            query = file.read()
+            self.execute_query(query)
+
+def load_and_execute_queries(directory, neo4j_connector, logger):
+    for filename in os.listdir(directory):
+        if filename.endswith('.cql') or filename.endswith('.cypher'):
+            file_path = os.path.join(directory, filename)
+            logger.info(f"Executing query from file: {filename}")
+            neo4j_connector.execute_file(file_path)
+
 def process_batch(df_batch, neo4j_connector, logger):
     logger.info(f"Starting to process batch of length {len(df_batch)}")
     batch_data = df_batch.to_dict('records')
@@ -263,6 +275,7 @@ def insert_into_neo4j(batch_size=50, **kwargs):
     NEO4J_USER = "neo4j"
     NEO4J_PASSWORD = "project_pass123"
 
+    queries_directory = '/opt/airflow/cypher_queries'
     base_input_path = '/opt/airflow/staging_area/arxiv_transformed_part_'
     part_count = 4
 
@@ -281,17 +294,22 @@ def insert_into_neo4j(batch_size=50, **kwargs):
     logger.info("Starting the Neo4j data processing")
 
     with Neo4jConnector(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD) as neo4j_connector:
+        load_and_execute_queries(queries_directory, neo4j_connector, logger)
+        
         for label, property in indexes_to_create:
             neo4j_connector.create_index(label, property)
             logger.info(f"Index created on :{label}({property})")
+
         for part in range(part_count):
             input_path = f"{base_input_path}{part}.json"
             logger.info(f"Checking for the existence of {input_path}")
+
             if os.path.exists(input_path):
                 logger.info(f"Processing file: {input_path}")
                 df = pd.read_json(input_path, orient='records', lines=True)
                 total_rows = len(df)
                 logger.info(f"Total rows in dataframe: {total_rows}")
+                
                 for start in range(0, total_rows, batch_size):
                     end = start + batch_size
                     logger.info(f"Processing batch from row {start} to {end}")

@@ -53,8 +53,8 @@ def transform_and_save_dataframe():
         logger.info(f"File {file_path} does not exist. Operation skipped.")
         return
 
-    # total_rows = get_total_rows(file_path)
-    total_rows = 500
+    total_rows = get_total_rows(file_path)
+    # total_rows = 500
     rows_per_subset = total_rows // 4
 
     for part in range(4):
@@ -66,8 +66,8 @@ def transform_and_save_dataframe():
         handle_id(df)
         handle_authors(df)
         map_general_categories(df, logger)
-        consume_crossref(df, logger)
-        # consume_semantic_scholar(df, logger)
+        # consume_crossref(df, logger)
+        consume_semantic_scholar(df, logger)
 
         # Save the processed subset
         output_path = f"{base_output_path}{part}.json"
@@ -80,4 +80,4 @@ with DAG('download_transform_arxiv_data', default_args=default_args, description
     t3 = PythonOperator(task_id='transform_and_save_dataframe', python_callable=transform_and_save_dataframe, provide_context=True)
     t4 = PythonOperator(task_id='insert_into_neo4j', python_callable=insert_into_neo4j, provide_context=True)
 
-    t1 >> t2 >> t3 >> t4
+    t1 >> t2 >> t3
