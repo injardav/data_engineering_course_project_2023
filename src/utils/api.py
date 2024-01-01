@@ -1,7 +1,9 @@
 import requests, time, json, pandas as pd
 from ratelimit import limits, sleep_and_retry
+from utils.utils import load_dataset
 
 S2_API_KEY = "wSoW3gF4Uy65upxcchh9H9f5SQZyb2I75LRwCUPR"
+S2_PAPERS_BATCH_SIZE = 500
 
 def consume_crossref(df, logger):
     def get_paper_info_from_crossref(doi, logger):
@@ -72,16 +74,23 @@ def consume_crossref(df, logger):
         'is_referenced_by_count', 'authors', 'language', 'links',
         'deposited', 'ISSN', 'ISSN_type', 'article_number', 'URLs', 'subject'
     ]
-    for field in field_names:
-        df[field] = None
 
-    for index, row in df.iterrows():
-        paper_info = get_paper_info_from_crossref(row['doi'], logger)
-        if paper_info:
-            for field in field_names:
-                df.at[index, field] = paper_info.get(field, None)
+    total_parts = 4
+    for part in range(1, total_parts + 1):
+        file_path = f"{'/opt/airflow/staging_area/arxiv_preprocessed_part_'}{part}.json"
+        logger.info(f"Enriching file: {file_path}")
+        df = load_dataset(file_path, logger)
 
-def consume_semantic_scholar(df, logger):
+        for field in field_names:
+            df[field] = None
+
+        for index, row in df.iterrows():
+            paper_info = get_paper_info_from_crossref(row['doi'], logger)
+            if paper_info:
+                for field in field_names:
+                    df.at[index, field] = paper_info.get(field, None)
+
+def consume_semantic_scholar(**kwargs):
     def format_id(row, id_type):
         """
         Formats the ID based on whether it's an ArXiv ID or a DOI.
@@ -111,6 +120,9 @@ def consume_semantic_scholar(df, logger):
             formatted_id = format_id(row, 'doi')
             paper = fetch_papers([formatted_id], fields)
         return paper
+    
+    logger = kwargs['ti'].log
+    logger.info("Starting data enrichment process with Semantic Scholar API")
 
     @sleep_and_retry
     @limits(calls=1, period=1)  # 1 request per second
@@ -134,27 +146,45 @@ def consume_semantic_scholar(df, logger):
             logger.error(f"Error fetching papers: {response.text}")
             return []
 
+    base_file_path = '/opt/airflow/staging_area/arxiv_preprocessed_part_'
+    base_output_path = '/opt/airflow/staging_area/arxiv_enriched_part_'
+    total_parts = 4
     fields = [
         "publicationTypes", "referenceCount", "references", "journal", "externalIds",
         "venue", "citationCount", "authors", "url", "openAccessPdf", "publicationDate"
     ]
 
-    # Initialize fields in the DataFrame
-    for field in fields:
-        df[field] = None
+    for part in range(1, total_parts + 1):
+        file_path = f"{base_file_path}{part}.json"
+        logger.info(f"Enriching file: {file_path}")
+        
+        df = load_dataset(file_path, logger)
 
-    all_rows = df.to_dict('records')
-    for chunk in chunker(all_rows, 500):
-        logger.info(f"Fetching papers from Semantic Scholar for {len(chunk)} IDs: {chunk}")
-        papers = [fetch_paper_with_fallback(row) for row in chunk]
+        # Initialize fields in the DataFrame
+        for field in fields:
+            df[field] = None
 
-        for paper in papers:
-            if isinstance(paper, dict):  # Ensure 'paper' is a dictionary
-                paper_doi = paper.get('externalIds', {}).get('DOI')
-                if paper_doi:
-                    matching_indices = df.index[df['doi'] == paper_doi].tolist()
-                    for index in matching_indices:
-                        for field in fields:
-                            df.at[index, field] = paper.get(field, None)
-            else:
-                logger.error(f"Invalid paper data format: {paper}")
+        all_rows = df.to_dict('records')
+        total_chunks = (len(all_rows) - 1) // S2_PAPERS_BATCH_SIZE + 1
+        current_chunk = 1
+        for chunk in chunker(all_rows, S2_PAPERS_BATCH_SIZE):
+            logger.info(f"Enriching chunk {current_chunk} of {total_chunks} for file part {part}")
+            papers = [fetch_paper_with_fallback(row) for row in chunk]
+
+            for paper in papers:
+                if isinstance(paper, dict):  # Ensure 'paper' is a dictionary
+                    paper_doi = paper.get('externalIds', {}).get('DOI')
+                    if paper_doi:
+                        matching_indices = df.index[df['doi'] == paper_doi].tolist()
+                        for index in matching_indices:
+                            for field in fields:
+                                df.at[index, field] = paper.get(field, None)
+                else:
+                    logger.error(f"Invalid paper data format: {paper}")
+            current_chunk += 1
+        logger.info(f"Completed enriching for file part {part}")
+
+        # Save the processed subset
+        output_path = f"{base_output_path}{part}.json"
+        df.to_json(output_path, orient='records', lines=True)
+        logger.info(f"Subset {part} of enriched file saved to {output_path}")

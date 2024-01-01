@@ -276,7 +276,7 @@ def insert_into_neo4j(batch_size=50, **kwargs):
     NEO4J_PASSWORD = "project_pass123"
 
     queries_directory = '/opt/airflow/neo4j/queries'
-    base_input_path = '/opt/airflow/staging_area/arxiv_transformed_part_'
+    base_input_path = '/opt/airflow/staging_area/arxiv_preprocessed_part_'
     part_count = 4
 
     indexes_to_create = [
@@ -319,3 +319,6 @@ def insert_into_neo4j(batch_size=50, **kwargs):
                 logger.warning(f"File not found: {input_path}")
 
     logger.info("Completed processing all parts")
+
+def insert_into_postgres(**kwargs):
+    ...

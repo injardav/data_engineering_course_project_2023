@@ -47,7 +47,7 @@ def unzip_dataset():
 
 def transform_and_save_dataframe():
     file_path = '/opt/airflow/dataset/arxiv-metadata-oai-snapshot.json'
-    base_output_path = '/opt/airflow/staging_area/arxiv_transformed_part_'
+    base_output_path = '/opt/airflow/staging_area/arxiv_preprocessed_part_'
     
     if not os.path.exists(file_path):
         logger.info(f"File {file_path} does not exist. Operation skipped.")
@@ -60,7 +60,7 @@ def transform_and_save_dataframe():
     for part in range(4):
         # Load a subset of the dataset
         subset_start_row = part * rows_per_subset
-        df = load_dataset(file_path, subset=True, start_row=subset_start_row, rows=rows_per_subset)
+        df = load_dataset(file_path, logger, subset=True, start_row=subset_start_row, rows=rows_per_subset)
         
         # Process the DataFrame
         handle_id(df)
