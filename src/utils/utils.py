@@ -1,5 +1,6 @@
 import os, zipfile, uuid, json, pandas as pd
 from kaggle.api.kaggle_api_extended import KaggleApi
+from utils.api import consume_crossref, consume_semantic_scholar
 
 def load_dataset(file_path, subset=False, start_row=0, rows=10):
     """
