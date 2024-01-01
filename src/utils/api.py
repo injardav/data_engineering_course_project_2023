@@ -90,7 +90,7 @@ def consume_crossref(df, logger):
                 for field in field_names:
                     df.at[index, field] = paper_info.get(field, None)
 
-def consume_semantic_scholar(**kwargs):
+def consume_semantic_scholar(base_file_path, base_file_destination, **kwargs):
     def format_id(row, id_type):
         """
         Formats the ID based on whether it's an ArXiv ID or a DOI.
@@ -146,8 +146,6 @@ def consume_semantic_scholar(**kwargs):
             logger.error(f"Error fetching papers: {response.text}")
             return []
 
-    base_file_path = '/opt/airflow/staging_area/arxiv_preprocessed_part_'
-    base_output_path = '/opt/airflow/staging_area/arxiv_enriched_part_'
     total_parts = 4
     fields = [
         "publicationTypes", "referenceCount", "references", "journal", "externalIds",
@@ -185,6 +183,6 @@ def consume_semantic_scholar(**kwargs):
         logger.info(f"Completed enriching for file part {part}")
 
         # Save the processed subset
-        output_path = f"{base_output_path}{part}.json"
+        output_path = f"{base_file_destination}{part}.json"
         df.to_json(output_path, orient='records', lines=True)
         logger.info(f"Subset {part} of enriched file saved to {output_path}")

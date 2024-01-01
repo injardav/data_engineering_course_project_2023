@@ -14,7 +14,7 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-with DAG('insert_into_postgres',
+with DAG('insert_into_postgres_stage_4',
          default_args=default_args,
          description='DAG to insert preprocessed and enriched data into postgres DWH',
          schedule_interval=None,  # Manually triggered or triggered by sensor
@@ -24,7 +24,7 @@ with DAG('insert_into_postgres',
         task_id='wait_for_enrich_dataset',
         external_dag_id='enrich_arxiv_data',
         external_task_id='enrich_dataset',  # Waiting for this task to complete
-        timeout=600,
+        timeout=60 * 60 * 24 * 8,  # 1 week
         poke_interval=30
     )
 

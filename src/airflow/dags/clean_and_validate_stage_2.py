@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.sensors.external_task_sensor import ExternalTaskSensor
-from utils.utils import clean_and_validate_dataset
+from utils.utils import clean_and_validate_dataset, delete_file
 
 default_args = {
     'owner': 'airflow',
@@ -14,7 +14,9 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-with DAG('clean_and_validate_arxiv_data',
+file_path = '/opt/airflow/dataset/arxiv-metadata-oai-snapshot.json'
+
+with DAG('clean_and_validate_stage_2',
          default_args=default_args,
          description='DAG to preprocess arxiv dataset',
          schedule_interval=None,  # Manually triggered or triggered by sensor
@@ -23,13 +25,23 @@ with DAG('clean_and_validate_arxiv_data',
     wait_for_download_and_unzip = ExternalTaskSensor(
         task_id='wait_for_download_and_unzip',
         external_dag_id='download_and_unzip_arxiv_data',
-        external_task_id='unzip_dataset',  # Waiting for this task to complete
-        timeout=600,
+        external_task_id='delete_zip_file',  # Waiting for this task to complete
+        timeout=60 * 60 * 24 * 8,  # 1 week and 1 day (because new data is downloaded weekly, we add some buffer time)
         poke_interval=30
     )
 
-    t3 = PythonOperator(task_id='clean_and_validate_dataset',
-                        python_callable=clean_and_validate_dataset,
-                        provide_context=True)
+    clean_and_validate = PythonOperator(
+        task_id='clean_and_validate_dataset',
+        python_callable=clean_and_validate_dataset,
+        op_args=[file_path],
+        provide_context=True
+    )
+    
+    delete = PythonOperator(
+        task_id='delete_json_file',
+        python_callable=delete_file,
+        op_args=[file_path],
+        provide_context=True
+    )
 
-    wait_for_download_and_unzip >> t3
+    wait_for_download_and_unzip >> clean_and_validate

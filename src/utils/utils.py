@@ -74,9 +74,7 @@ def get_total_rows(file_path):
             count += 1
     return count
 
-def download_dataset(**kwargs):
-    dataset_path = '/opt/airflow/dataset/arxiv.zip'
-
+def download_dataset(kaggle_dataset, dataset_path, **kwargs):
     logger = kwargs['ti'].log
     logger.info("Starting download dataset process")
 
@@ -85,17 +83,14 @@ def download_dataset(**kwargs):
             logger.info("Dataset did not exist, attempting to download")
             kaggle_api = KaggleApi()
             kaggle_api.authenticate()
-            kaggle_api.dataset_download_files('Cornell-University/arxiv', path='/opt/airflow/dataset/', unzip=False)
+            kaggle_api.dataset_download_files(kaggle_dataset, path='/opt/airflow/dataset/', unzip=False)
         except Exception as e:
             logger.error(f"Failed to download dataset: {e}")
             raise
     else:
         logger.info("Dataset exists, proceeding")
 
-def unzip_dataset(**kwargs):
-    dataset_path = '/opt/airflow/dataset/arxiv.zip'
-    extracted_path = '/opt/airflow/dataset/arxiv-metadata-oai-snapshot.json'
-
+def unzip_dataset(dataset_path, extracted_path, **kwargs):
     logger = kwargs['ti'].log
     logger.info("Starting unzipping dataset process")
 
@@ -110,8 +105,26 @@ def unzip_dataset(**kwargs):
     else:
         logger.info("Dataset either did not exist or was already unzipped, proceeding")
 
-def clean_and_validate_dataset(**kwargs):
-    file_path = '/opt/airflow/dataset/arxiv-metadata-oai-snapshot.json'
+def delete_file(file_path, **kwargs):
+    """
+    Deletes a file at the given file_path.
+
+    :param file_path: The full path of the file to be deleted.
+    """
+    logger = kwargs['ti'].log
+
+    if os.path.exists(file_path):
+        try:
+            logger.info(f"Attempting to delete file: {file_path}")
+            os.remove(file_path)
+            logger.info(f"File successfully deleted: {file_path}")
+        except Exception as e:
+            logger.error(f"Failed to delete file: {e}")
+            raise
+    else:
+        logger.info(f"File does not exist, nothing to delete: {file_path}")
+
+def clean_and_validate_dataset(file_path, **kwargs):
     base_output_path = '/opt/airflow/staging_area/arxiv_preprocessed_part_'
     
     logger = kwargs['ti'].log

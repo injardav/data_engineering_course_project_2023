@@ -14,7 +14,10 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-with DAG('enrich_arxiv_data',
+base_file_path = '/opt/airflow/staging_area/arxiv_preprocessed_part_'
+base_file_destination = '/opt/airflow/staging_area/arxiv_enriched_part_'
+
+with DAG('enrich_stage_3',
          default_args=default_args,
          description='DAG to enrich arxiv dataset with Semantic Scholar API data',
          schedule_interval=None,  # Manually triggered or triggered by sensor
@@ -23,13 +26,14 @@ with DAG('enrich_arxiv_data',
     wait_for_clean_and_validate = ExternalTaskSensor(
         task_id='wait_for_clean_and_validate',
         external_dag_id='clean_and_validate_arxiv_data',
-        external_task_id='clean_and_validate_dataset',  # Waiting for this task to complete
-        timeout=600,
+        external_task_id='delete_json_file',  # Waiting for this task to complete
+        timeout=60 * 60 * 24 * 8,  # 1 week,
         poke_interval=30
     )
 
-    t4 = PythonOperator(task_id='enrich_dataset',
+    enrich = PythonOperator(task_id='enrich_dataset',
                         python_callable=consume_semantic_scholar,
+                        op_args=[base_file_path, base_file_destination],
                         provide_context=True)
 
-    wait_for_clean_and_validate >> t4
+    wait_for_clean_and_validate >> enrich
