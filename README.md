@@ -21,8 +21,7 @@ The initialization persists across container restarts as long as the data in you
 
 Create an Admin user:
 
-4. `docker-compose run --rm airflow-webserver bash`
-5. `airflow users create --username admin --firstname Admin --lastname Admin --role Admin --email admin@example.com --password admin`
+4. `docker-compose run --rm airflow-webserver airflow users create --username admin --firstname Admin --lastname Admin --role Admin --email admin@example.com --password admin`
 
 ### Normal Setup
 `docker-compose up -d`

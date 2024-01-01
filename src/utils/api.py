@@ -82,15 +82,16 @@ def consume_crossref(df, logger):
                 df.at[index, field] = paper_info.get(field, None)
 
 def consume_semantic_scholar(df, logger):
-    def format_id(row):
+    def format_id(row, id_type):
         """
         Formats the ID based on whether it's an ArXiv ID or a DOI.
         """
-        if pd.notna(row['arxiv']):
+        if id_type == 'arxiv' and pd.notna(row['arxiv']):
             return f"ARXIV:{row['arxiv']}"
-        elif pd.notna(row['doi']):
+        elif id_type == 'doi' and pd.notna(row['doi']):
             return f"DOI:{row['doi']}"
         else:
+            logger.info("ARXIV and DOI were not found for paper. This should not happen")
             return None
 
     def chunker(seq, size):
@@ -98,6 +99,18 @@ def consume_semantic_scholar(df, logger):
         Divides the data into chunks of specified size.
         """
         return (seq[pos:pos + size] for pos in range(0, len(seq), size))
+    
+    def fetch_paper_with_fallback(row):
+        """
+        Fetches a single paper, first trying with ARXIV ID, then with DOI if the first attempt fails.
+        """
+        formatted_id = format_id(row, 'arxiv')
+        paper = fetch_papers([formatted_id], fields)
+        if paper is None or not paper:
+            logger.info("Paper not found with ARXIV, attempting with DOI")
+            formatted_id = format_id(row, 'doi')
+            paper = fetch_papers([formatted_id], fields)
+        return paper
 
     @sleep_and_retry
     @limits(calls=1, period=1)  # 1 request per second
@@ -130,13 +143,10 @@ def consume_semantic_scholar(df, logger):
     for field in fields:
         df[field] = None
 
-    df['formatted_id'] = df.apply(format_id, axis=1)
-    df.dropna(subset=['formatted_id'], inplace=True)
-
-    all_formatted_ids = df['formatted_id'].tolist()
-    for chunk in chunker(all_formatted_ids, 100):
+    all_rows = df.to_dict('records')
+    for chunk in chunker(all_rows, 500):
         logger.info(f"Fetching papers from Semantic Scholar for {len(chunk)} IDs: {chunk}")
-        papers = fetch_papers(chunk, fields)
+        papers = [fetch_paper_with_fallback(row) for row in chunk]
 
         for paper in papers:
             if isinstance(paper, dict):  # Ensure 'paper' is a dictionary
@@ -148,6 +158,3 @@ def consume_semantic_scholar(df, logger):
                             df.at[index, field] = paper.get(field, None)
             else:
                 logger.error(f"Invalid paper data format: {paper}")
-
-    # Drop the temporary 'formatted_id' column
-    df.drop(columns=['formatted_id'], inplace=True)

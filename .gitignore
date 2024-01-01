@@ -1,4 +1,7 @@
 __pycache__/
-/airflow/staging_area/*
-/airflow/logs/*
-/elasticsearch-data/*
+/src/postgres/data/*
+/src/neo4j/data/*
+/src/elasticsearch/data/*
+/src/staging_area/*
+/src/airflow/logs/*
+/src/airflow/dataset/*

@@ -53,8 +53,8 @@ def transform_and_save_dataframe():
         logger.info(f"File {file_path} does not exist. Operation skipped.")
         return
 
-    total_rows = get_total_rows(file_path)
-    # total_rows = 500
+    # total_rows = get_total_rows(file_path)
+    total_rows = 10000
     rows_per_subset = total_rows // 4
 
     for part in range(4):
