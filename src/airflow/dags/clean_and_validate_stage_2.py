@@ -44,4 +44,4 @@ with DAG('clean_and_validate_stage_2',
         provide_context=True
     )
 
-    wait_for_download_and_unzip >> clean_and_validate
+    wait_for_download_and_unzip >> clean_and_validate >> delete
