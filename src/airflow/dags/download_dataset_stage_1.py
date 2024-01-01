@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from utils.utils import download_dataset, unzip_dataset, delete_file
 
 default_args = {
@@ -44,4 +45,9 @@ with DAG('download_dataset_stage_1',
         provide_context=True
     )
 
-    download >> unzip >> delete
+    run_clean_and_validate = TriggerDagRunOperator(
+        task_id='trigger_clean_and_validate',
+        trigger_dag_id='clean_and_validate_stage_2',
+    )
+
+    download >> unzip >> delete >> run_clean_and_validate

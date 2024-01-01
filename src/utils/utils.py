@@ -5,11 +5,13 @@ def load_dataset(file_path, logger, subset=False, start_row=0, rows=10):
     """
     Loads a specific subset of the dataset starting from `start_row` and 
     loading `rows` number of rows, or the entire dataset if `subset` is False.
-    Applies dropna to remove rows where both 'doi' and 'id' are NaN.
+    Applies dropna to remove rows where both 'doi' and 'arxiv' are NaN.
     Checks if the file exists before attempting to load.
     """
+    logger.info(f"Attempting to load dataset from: {file_path}")
+
     if not os.path.exists(file_path):
-        logger.info(f"File not found: {file_path}")
+        logger.warning(f"File not found: {file_path}")
         return pd.DataFrame()
 
     data = []
@@ -22,7 +24,7 @@ def load_dataset(file_path, logger, subset=False, start_row=0, rows=10):
 
             row = json.loads(line)
             if subset:
-                if ('doi' in row and row['doi']) and ('arxiv' in row and row['id']):
+                if ('doi' in row and row['doi']) and ('id' in row and row['id']): # arXiv value is under 'id' field
                     if current_row >= start_row:
                         data.append(row)
                     current_row += 1
@@ -30,8 +32,14 @@ def load_dataset(file_path, logger, subset=False, start_row=0, rows=10):
                 data.append(row)
 
     df = pd.DataFrame(data)
-    if not subset:
+
+    if subset:
+        logger.info(f"Loaded subset of data: start_row={start_row}, rows={rows}")
+    else:
         df = df.dropna(subset=['arxiv', 'doi'], how='all')
+        logger.info("Loaded entire dataset with NaN 'arxiv' and 'doi' dropped")
+
+    logger.info(f"Total rows loaded: {len(df)}")
     return df
 
 def get_unique_categories(row):
@@ -54,18 +62,13 @@ def map_general_categories(df, logger):
     df['general_category'] = df['categories'].apply(lambda x: map_category(x, category_mapping, logger))
     df.drop('categories', axis=1, inplace=True)
 
-def handle_id(df):
+def handle_id(df, logger):
     """
     Rename `id` to `arxiv` and create correct `id` field with UUID values
     """
+    logger.info("Renaming id column to arxiv. Creating new id column with uuid values")
     df.rename(columns={'id': 'arxiv'}, inplace=True)
     df['id'] = [str(uuid.uuid4()) for _ in range(len(df))]
-
-def handle_authors(df):
-    """
-    Change all empty authors values to empty list for later parsing
-    """
-    df['authors'] = df['authors'].apply(lambda x: [] if pd.isna(x) or x.strip() == '' else x)
 
 def get_total_rows(file_path):
     count = 0
@@ -140,13 +143,13 @@ def clean_and_validate_dataset(file_path, **kwargs):
     rows_per_subset = total_rows // total_parts
 
     for part in range(1, total_parts + 1):
-        # Load a subset of the dataset to "simulate" new data fetching
-        subset_start_row = part * rows_per_subset
+        subset_start_row = (part - 1) * rows_per_subset
+
+        logger.info(f"Processing subset starting from row {subset_start_row} with step {rows_per_subset}")
         df = load_dataset(file_path, logger, subset=True, start_row=subset_start_row, rows=rows_per_subset)
         
         # Process the DataFrame
-        handle_id(df)
-        handle_authors(df)
+        handle_id(df, logger)
         map_general_categories(df, logger)
 
         # Save the processed subset

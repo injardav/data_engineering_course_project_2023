@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-from airflow.sensors.external_task_sensor import ExternalTaskSensor
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from utils.api import consume_semantic_scholar
 
 default_args = {
@@ -23,17 +23,19 @@ with DAG('enrich_stage_3',
          schedule_interval=None,  # Manually triggered or triggered by sensor
          catchup=False) as dag:
 
-    wait_for_clean_and_validate = ExternalTaskSensor(
-        task_id='wait_for_clean_and_validate',
-        external_dag_id='clean_and_validate_stage_2',
-        external_task_id='delete_json_file',  # Waiting for this task to complete
-        timeout=60 * 60 * 24 * 8,  # 1 week,
-        poke_interval=30
-    )
-
     enrich = PythonOperator(task_id='enrich_dataset',
                         python_callable=consume_semantic_scholar,
                         op_args=[base_file_path, base_file_destination],
                         provide_context=True)
+    
+    run_insert_into_neo4j = TriggerDagRunOperator(
+        task_id='trigger_insert_into_neo4j',
+        trigger_dag_id='insert_into_neo4j_stage_4',
+    )
 
-    wait_for_clean_and_validate >> enrich
+    run_insert_into_postgres = TriggerDagRunOperator(
+        task_id='trigger_insert_into_postgres',
+        trigger_dag_id='insert_into_postgres_stage_4',
+    )
+
+    enrich >> [run_insert_into_neo4j, run_insert_into_postgres]

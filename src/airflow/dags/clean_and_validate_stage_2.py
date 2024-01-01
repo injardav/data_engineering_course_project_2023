@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-from airflow.sensors.external_task_sensor import ExternalTaskSensor
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from utils.utils import clean_and_validate_dataset, delete_file
 
 default_args = {
@@ -22,14 +22,6 @@ with DAG('clean_and_validate_stage_2',
          schedule_interval=None,  # Manually triggered or triggered by sensor
          catchup=False) as dag:
 
-    wait_for_download_and_unzip = ExternalTaskSensor(
-        task_id='wait_for_download_and_unzip',
-        external_dag_id='download_dataset_stage_1',
-        external_task_id='delete_zip_file',  # Waiting for this task to complete
-        timeout=60 * 60 * 24 * 8,  # 1 week and 1 day (because new data is downloaded weekly, we add some buffer time)
-        poke_interval=30
-    )
-
     clean_and_validate = PythonOperator(
         task_id='clean_and_validate_dataset',
         python_callable=clean_and_validate_dataset,
@@ -44,4 +36,9 @@ with DAG('clean_and_validate_stage_2',
         provide_context=True
     )
 
-    wait_for_download_and_unzip >> clean_and_validate >> delete
+    run_enrichment = TriggerDagRunOperator(
+        task_id='trigger_enrichment',
+        trigger_dag_id='enrich_stage_3',
+    )
+
+    clean_and_validate >> delete >> run_enrichment
