@@ -75,6 +75,52 @@ def process_sem_general(df_batch, neo4j_connector, logger):
 
     for row_index, row in enumerate(batch_data):
         try:
+            # # Process Journal
+            # row['journal_name'] = row.get('journal', {}).get('name')
+            # row['journal_pages'] = row.get('journal', {}).get('pages')
+            # row['journal_volume'] = row.get('journal', {}).get('volume')
+
+            # # Process ISSN Type
+            # ISSN_type = row.get('ISSN_type', [])
+            # row['ISSN_type_values'] = [item.get('value') for item in ISSN_type]
+            # row['ISSN_type_types'] = [item.get('type') for item in ISSN_type]
+
+            # # Process authors
+            # authors = row.get('authors', [])
+            # for author in authors:
+            #     author_key = author.get('name')
+            #     if author_key not in author_uuids:
+            #         author_uuids[author_key] = str(uuid.uuid4())
+
+            #     author_data = {
+            #         'publication_id': row.get('id'),
+            #         'author_id': author_uuids[author_key],
+            #         'name': author_key
+            #     }
+            #     authors_data.append(author_data)
+
+            # # Process references
+            # references = row.get('references', [])
+            # for reference in references:
+            #     reference_data = {
+            #         'publication_id': row.get('id'),
+            #         'ref_doi': reference.get('DOI'),
+            #         'ref_key': reference.get('key'),
+            #         'ref_doi_asserted_by': reference.get('doi-asserted-by')
+            #     }
+            #     references_data.append(reference_data)
+
+            # # Process versions
+            # versions = row.get('versions', [])
+            # for version in versions:
+            #     version_data = {
+            #         'publication_id': row.get('id'),
+            #         'version_id': str(uuid.uuid4()),
+            #         'created_time': version.get('created'),
+            #         'version': version.get('version')
+            #     }
+            #     versions_data.append(version_data)
+
             # Update names
             for author in row.get('authors_parsed', []):
                 row['author']['first_name'] = author[0]
