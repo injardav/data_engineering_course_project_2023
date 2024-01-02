@@ -17,7 +17,7 @@ default_args = {
 base_file_path = '/opt/airflow/staging_area/arxiv_enriched_sem_general_part_'
 base_file_destination = '/opt/airflow/staging_area/arxiv_enriched_sem_additional_part_'
 
-with DAG('enrich_sem_general_stage_3',
+with DAG('enrich_sem_general_stage_5',
          default_args=default_args,
          description='Enrich dataset with general data from Semantic Scholar API (bulk papers data)',
          schedule_interval=None,  # Manually triggered or triggered by sensor
