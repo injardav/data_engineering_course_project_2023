@@ -15,7 +15,7 @@ default_args = {
 }
 
 queries_directory = '/opt/airflow/neo4j/queries'
-base_input_path = '/opt/airflow/staging_area/arxiv_preprocessed_part_'
+base_input_path = '/opt/airflow/staging_area/arxiv_enriched_part_'
 
 with DAG('insert_into_neo4j_stage_4',
          default_args=default_args,
@@ -31,9 +31,9 @@ with DAG('insert_into_neo4j_stage_4',
         poke_interval=30
     )
 
-    t5 = PythonOperator(task_id='insert_into_neo4j',
+    insert_into_neo4j = PythonOperator(task_id='insert_into_neo4j',
                         python_callable=insert_into_neo4j,
                         op_args=[queries_directory, base_input_path],
                         provide_context=True)
 
-    wait_for_enrich_dataset >> t5
+    wait_for_enrich_dataset >> insert_into_neo4j

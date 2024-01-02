@@ -270,7 +270,7 @@ def process_batch(df_batch, neo4j_connector, logger):
     except Exception as e:
         logger.error(f"Error executing Neo4j queries: {e}")
 
-def insert_into_neo4j(queries_directory, base_input_path, batch_size=50, **kwargs):
+def insert_into_neo4j(queries_directory, base_input_path, batch_size=500, **kwargs):
     NEO4J_URI = "bolt://neo4j:7687"
     NEO4J_USER = "neo4j"
     NEO4J_PASSWORD = "project_pass123"

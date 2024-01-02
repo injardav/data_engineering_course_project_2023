@@ -28,8 +28,8 @@ with DAG('insert_into_postgres_stage_4',
         poke_interval=30
     )
 
-    t5 = PythonOperator(task_id='insert_into_postgres',
+    insert_into_postgres = PythonOperator(task_id='insert_into_postgres',
                         python_callable=insert_into_postgres,
                         provide_context=True)
 
-    wait_for_enrich_dataset >> t5
+    wait_for_enrich_dataset >> insert_into_postgres
