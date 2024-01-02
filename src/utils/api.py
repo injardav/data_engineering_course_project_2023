@@ -88,25 +88,23 @@ def consume_crossref(df, logger):
                     df.at[index, field] = paper_info.get(field, None)
 
 def consume_semantic_scholar(base_file_path, base_file_destination, **kwargs):
+    BASE_URL = 'https://api.semanticscholar.org/graph/v1'
     S2_API_KEY = "wSoW3gF4Uy65upxcchh9H9f5SQZyb2I75LRwCUPR"
-    S2_PAPERS_BATCH_SIZE = 500
+    S2_PAPERS_BATCH_SIZE = 100
     total_parts = 4
 
     logger = kwargs['ti'].log
     logger.info("Starting data enrichment process with Semantic Scholar API")
 
-    @sleep_and_retry
-    @limits(calls=1, period=1)  # 1 request per second
-    def fetch_papers(ids, fields):
+    def make_api_request(url, data=None, method='GET'):
         """
-        Fetches papers from Semantic Scholar API for given IDs.
+        Generic function to make API requests to Semantic Scholar.
         """
-        response = requests.post(
-            'https://api.semanticscholar.org/graph/v1/paper/batch',
-            headers={'x-api-key': S2_API_KEY},
-            params={'fields': ','.join(fields)},
-            json={'ids': ids}
-        )
+        headers = {'x-api-key': S2_API_KEY}
+        if method.upper() == 'GET':
+            response = requests.get(url, headers=headers, params=data)
+        elif method.upper() == 'POST':
+            response = requests.post(url, headers=headers, json=data)
         if response.status_code == 200:
             try:
                 return response.json()
@@ -114,20 +112,125 @@ def consume_semantic_scholar(base_file_path, base_file_destination, **kwargs):
                 logger.error("Failed to decode JSON from response")
                 return []
         else:
-            logger.error(f"Error fetching papers: {response.text}")
+            logger.error(f"Error (response code {response.status_code}) in API request: {response.text} with url: {url}")
             return []
+
+    @sleep_and_retry
+    @limits(calls=1, period=1) # 1 request per second
+    def fetch_papers(ids, fields):
+        """
+        Fetches papers from Semantic Scholar API for given IDs.
+        """
+        url = f"{BASE_URL}/paper/batch"
+        params = {
+            'fields': ','.join(fields),
+            'ids': ids
+        }
+        return make_api_request(url, params, 'POST')
+
+    @sleep_and_retry
+    @limits(calls=10, period=1) # 10 request per second
+    def fetch_authors(paper_id, fields):
+        """
+        Fetches authors from Semantic Scholar API for a given paper ID.
+        """
+        url = f"{BASE_URL}/paper/{paper_id}/authors"
+        params = {'fields': ','.join(fields)}
+        return make_api_request(url, params)
+
+    @sleep_and_retry
+    @limits(calls=10, period=1) # 10 request per second
+    def fetch_citations(paper_id, fields):
+        """
+        Fetches citations from Semantic Scholar API for a given paper ID.
+        """
+        url = f"{BASE_URL}/paper/{paper_id}/citations"
+        params = {'fields': ','.join(fields)}
+        return make_api_request(url, params)
+
+    @sleep_and_retry
+    @limits(calls=10, period=1) # 10 request per second
+    def fetch_references(paper_id, fields):
+        """
+        Fetches references from Semantic Scholar API for a given paper ID.
+        """
+        url = f"{BASE_URL}/paper/{paper_id}/references"
+        params = {'fields': ','.join(fields)}
+        return make_api_request(url, params)
         
     def format_id(row, id_type):
         if id_type == 'arxiv' and pd.notna(row['arxiv']):
             return f"ARXIV:{row['arxiv']}"
         elif id_type == 'doi' and pd.notna(row['doi']):
             return f"DOI:{row['doi']}"
-        return None
+        return None 
 
+    paper_fields = [
+        "paperId", "url", "title", "venue", "year", "abstract", "referenceCount",
+        "citationCount", "influentialCitationCount", "isOpenAccess", "openAccessPdf",
+        "fieldsOfStudy", "s2FieldsOfStudy", "publicationDate", "publicationVenue",
+        "journal", "externalIds", "authors", "citations", "publicationTypes"
+    ]
 
-    fields = ["publicationTypes", "referenceCount", "references", "journal", "externalIds",
-              "venue", "citationCount", "authors", "url", "openAccessPdf", "publicationDate"]
+    author_fields = [
+        'name', 'url', 'aliases', 'homepage', 
+        'paperCount', 'citationCount', 'hIndex', 'affiliations'
+    ]
 
+    citation_fields = [
+        'citationCount', 'influentialCitationCount', 'isOpenAccess', 
+        'openAccessPdf', 'fieldsOfStudy', 's2FieldsOfStudy', 
+        'publicationTypes', 'publicationDate', 'journal'
+    ]
+
+    reference_fields = [
+        'citationCount', 'influentialCitationCount', 'isOpenAccess', 
+        'openAccessPdf', 'fieldsOfStudy', 's2FieldsOfStudy', 
+        'publicationTypes', 'publicationDate', 'journal'
+    ]
+
+    def process_paper(paper, paper_id, row_index):
+        if row_index >= len(df):
+            return
+        
+        for field in paper_fields + ['authors_data', 'citations_data', 'references_data']:
+            if field not in df.columns:
+                df[field] = None
+        
+        # Fetch and process authors, citations, and references
+        authors = fetch_authors(paper_id, author_fields)
+        logger.info(f"authors: {authors}")
+        citations = fetch_citations(paper_id, citation_fields)
+        references = fetch_references(paper_id, reference_fields)
+
+        # Store authors, citations, and references in the DataFrame
+        df.at[row_index, 'authors_data'] = authors.get('data')
+        df.at[row_index, 'citations_data'] = citations.get('data')
+        df.at[row_index, 'references_data'] = references.get('data')
+
+        # Update other fields from the paper
+        for field in paper_fields:
+            df.at[row_index, field] = paper.get(field)
+
+    def process_batch(batch, batch_index):
+        logger.info(f"Processing batch {batch_index + 1}/{len(batches)}")
+        arxiv_ids = [format_id(row, 'arxiv') for row in batch if format_id(row, 'arxiv')]
+        response = fetch_papers(arxiv_ids, paper_fields) 
+
+        retry_ids = [arxiv_ids[i] for i, paper in enumerate(response) if paper is None]
+        doi_ids = [format_id(batch[i], 'doi') for i in range(len(batch)) if arxiv_ids[i] in retry_ids]
+        response_retry = fetch_papers(doi_ids, paper_fields)
+
+        # Process each paper in the batch
+        for i, paper in enumerate(response + response_retry):
+            if paper:
+                paper_id = paper.get('paperId')
+                if paper_id:
+                    process_paper(paper, paper_id, batch_index * S2_PAPERS_BATCH_SIZE + i)
+
+        logger.info(f"Completed processing batch {batch_index + 1}/{len(batches)}")
+
+    # Main loop
     for part in range(1, total_parts + 1):
         file_path = f"{base_file_path}{part}.json"
         output_path = f"{base_file_destination}{part}.json"
@@ -137,44 +240,8 @@ def consume_semantic_scholar(base_file_path, base_file_destination, **kwargs):
         all_rows = df.to_dict('records')
         batches = [all_rows[i:i + S2_PAPERS_BATCH_SIZE] for i in range(0, len(all_rows), S2_PAPERS_BATCH_SIZE)]
 
-        for field in fields:
-            if field not in df.columns:
-                df[field] = None
-
         for batch_index, batch in enumerate(batches):
-            logger.info(f"Processing batch {batch_index + 1}/{len(batches)}")
-            
-            arxiv_ids = [format_id(row, 'arxiv') for row in batch if format_id(row, 'arxiv')]
-            response = fetch_papers(arxiv_ids, fields)
-
-            retry_ids = [arxiv_ids[i] for i, paper in enumerate(response) if paper is None]
-            doi_ids = [format_id(batch[i], 'doi') for i in range(len(batch)) if arxiv_ids[i] in retry_ids]
-            response_retry = fetch_papers(doi_ids, fields)
-
-            # Create a mapping from DOI IDs back to ARXIV IDs
-            arxiv_to_doi_map = {arxiv_ids[i]: doi_ids[i] for i in range(len(doi_ids))}
-
-            # Update df with response data
-            for i, paper in enumerate(response):
-                if paper is not None:
-                    row_index = batch_index * S2_PAPERS_BATCH_SIZE + i
-                    if row_index < len(df):
-                        for field in fields:
-                            df.at[row_index, field] = paper.get(field)
-
-            # Update df with retry response data
-            for i, paper in enumerate(response_retry):
-                if paper is not None:
-                    # Find the corresponding ARXIV ID for this DOI ID
-                    arxiv_id = next((k for k, v in arxiv_to_doi_map.items() if v == doi_ids[i]), None)
-                    if arxiv_id:
-                        # Get the index of the ARXIV ID in the original batch
-                        row_index = batch_index * S2_PAPERS_BATCH_SIZE + arxiv_ids.index(arxiv_id)
-                        if row_index < len(df):
-                            for field in fields:
-                                df.at[row_index, field] = paper.get(field)
-
-            logger.info(f"Completed processing batch {batch_index + 1}/{len(batches)}")
+            process_batch(batch, batch_index)
 
         # Save the processed subset
         df.to_json(output_path, orient='records', lines=True, force_ascii=False)

@@ -70,6 +70,24 @@ def handle_id(df, logger):
     df.rename(columns={'id': 'arxiv'}, inplace=True)
     df['id'] = [str(uuid.uuid4()) for _ in range(len(df))]
 
+def handle_authors(df, logger):
+    def transform_author_field(author_string):
+        if not author_string or pd.isna(author_string):
+            return []
+
+        # Split the string at commas and trim whitespace
+        author_names = [name.strip() for name in author_string.split(',')]
+        
+        # Convert each name into a dictionary
+        return [{'name': name} for name in author_names if name]
+
+    try:
+        # Apply the transformation to the 'authors' column
+        df['authors'] = df['authors'].apply(transform_author_field)
+    except Exception as e:
+        logger.error(f"Error in handle_authors: {e}")
+    
+
 def get_total_rows(file_path):
     count = 0
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -138,7 +156,7 @@ def clean_and_validate_dataset(file_path, **kwargs):
         return
 
     # total_rows = get_total_rows(file_path)
-    total_rows = 10000
+    total_rows = 10
     total_parts = 4
     rows_per_subset = total_rows // total_parts
 
@@ -150,6 +168,7 @@ def clean_and_validate_dataset(file_path, **kwargs):
         
         # Process the DataFrame
         handle_id(df, logger)
+        handle_authors(df, logger)
         map_general_categories(df, logger)
 
         # Save the processed subset
