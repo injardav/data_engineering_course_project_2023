@@ -25,7 +25,7 @@ class Neo4jConnector:
             session.run(create_index_query)
 
     def execute_file(self, file_path):
-        with open(file_path, 'r') as file:
+        with open(file_path, 'r', encoding='utf-8') as file:
             query = file.read()
             self.execute_query(query)
 
@@ -270,13 +270,10 @@ def process_batch(df_batch, neo4j_connector, logger):
     except Exception as e:
         logger.error(f"Error executing Neo4j queries: {e}")
 
-def insert_into_neo4j(batch_size=50, **kwargs):
+def insert_into_neo4j(queries_directory, base_input_path, batch_size=50, **kwargs):
     NEO4J_URI = "bolt://neo4j:7687"
     NEO4J_USER = "neo4j"
     NEO4J_PASSWORD = "project_pass123"
-
-    queries_directory = '/opt/airflow/neo4j/queries'
-    base_input_path = '/opt/airflow/staging_area/arxiv_preprocessed_part_'
     part_count = 4
 
     indexes_to_create = [
@@ -300,7 +297,7 @@ def insert_into_neo4j(batch_size=50, **kwargs):
             neo4j_connector.create_index(label, property)
             logger.info(f"Index created on :{label}({property})")
 
-        for part in range(part_count):
+        for part in range(1, part_count + 1):
             input_path = f"{base_input_path}{part}.json"
             logger.info(f"Checking for the existence of {input_path}")
 

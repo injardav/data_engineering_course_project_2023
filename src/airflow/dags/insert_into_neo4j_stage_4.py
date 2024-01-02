@@ -14,6 +14,9 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
+queries_directory = '/opt/airflow/neo4j/queries'
+base_input_path = '/opt/airflow/staging_area/arxiv_preprocessed_part_'
+
 with DAG('insert_into_neo4j_stage_4',
          default_args=default_args,
          description='DAG to insert preprocessed and enriched data into Neo4j graph database',
@@ -30,6 +33,7 @@ with DAG('insert_into_neo4j_stage_4',
 
     t5 = PythonOperator(task_id='insert_into_neo4j',
                         python_callable=insert_into_neo4j,
+                        op_args=[queries_directory, base_input_path],
                         provide_context=True)
 
     wait_for_enrich_dataset >> t5

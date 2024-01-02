@@ -17,7 +17,7 @@ def load_dataset(file_path, logger, subset=False, start_row=0, rows=10):
     data = []
     current_row = 0
 
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         for line in file:
             if subset and current_row >= start_row + rows:
                 break
@@ -47,7 +47,7 @@ def get_unique_categories(row):
 
 def load_category_mapping(file_path, logger):
     logger.info("Loading category mapping json")
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         return json.load(file)
     
 def map_category(row, mapping, logger):
