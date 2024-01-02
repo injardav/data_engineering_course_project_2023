@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-from airflow.sensors.external_task_sensor import ExternalTaskSensor
 from utils.databases import insert_into_neo4j
 
 default_args = {
@@ -23,17 +22,9 @@ with DAG('insert_into_neo4j_stage_4',
          schedule_interval=None,  # Manually triggered or triggered by sensor
          catchup=False) as dag:
 
-    wait_for_enrich_dataset = ExternalTaskSensor(
-        task_id='wait_for_enrich_dataset',
-        external_dag_id='enrich_stage_3',
-        external_task_id='enrich_dataset',  # Waiting for this task to complete
-        timeout=60 * 60 * 24 * 8,  # 1 week
-        poke_interval=30
-    )
-
     insert_into_neo4j = PythonOperator(task_id='insert_into_neo4j',
                         python_callable=insert_into_neo4j,
                         op_args=[queries_directory, base_input_path],
                         provide_context=True)
 
-    wait_for_enrich_dataset >> insert_into_neo4j
+    insert_into_neo4j

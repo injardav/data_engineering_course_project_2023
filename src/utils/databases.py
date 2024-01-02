@@ -43,48 +43,47 @@ def process_batch(df_batch, neo4j_connector, logger):
     authors_data = []
     references_data = []
     versions_data = []
+
     for row in batch_data:
-        logger.debug(f"Processing row: {row['id']}")
+        logger.debug(f"Processing row: {row.get('id', 'Unknown ID')}")
         try:
-            row['ISSN_type_values'] = [item['value'] for item in row['ISSN_type']]
-            row['ISSN_type_types'] = [item['type'] for item in row['ISSN_type']]
+            ISSN_type = row.get('ISSN_type', [])
+            row['ISSN_type_values'] = [item.get('value') for item in ISSN_type]
+            row['ISSN_type_types'] = [item.get('type') for item in ISSN_type]
 
-            authors = row.get('authors') or []
+            authors = row.get('authors', [])
             for author in authors:
-                # Create a unique key for each author (e.g., using first and last name)
                 author_key = (author.get('given'), author.get('family'))
-
-                # Check if the author already has a UUID, otherwise generate a new one
                 if author_key not in author_uuids:
                     author_uuids[author_key] = str(uuid.uuid4())
 
                 authors_data.append({
-                    'publication_id': row['id'],
+                    'publication_id': row.get('id'),
                     'author_id': author_uuids[author_key],
                     'first_name': author.get('given'),
                     'family_name': author.get('family')
                 })
 
-            references = row.get('references') or []
+            references = row.get('references', [])
             for reference in references:
                 references_data.append({
-                    'publication_id': row['id'],
+                    'publication_id': row.get('id'),
                     'ref_doi': reference.get('DOI'),
                     'ref_key': reference.get('key'),
                     'ref_doi_asserted_by': reference.get('doi-asserted-by')
                 })
 
-            versions = row.get('versions') or []
+            versions = row.get('versions', [])
             for version in versions:
                 versions_data.append({
-                    'publication_id': row['id'],
+                    'publication_id': row.get('id'),
                     'version_id': str(uuid.uuid4()),
                     'created_time': version.get('created'),
                     'version': version.get('version')
                 })
 
         except Exception as e:
-            logger.error(f"Error processing row {row['id']}: {e}")
+            logger.error(f"Error processing row {row.get('id', 'Unknown ID')}: {e}")
 
     try:
         versions_query = """
