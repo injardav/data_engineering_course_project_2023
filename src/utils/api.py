@@ -128,7 +128,7 @@ def consume_semantic_scholar(base_file_path, base_file_destination, **kwargs):
     fields = ["publicationTypes", "referenceCount", "references", "journal", "externalIds",
               "venue", "citationCount", "authors", "url", "openAccessPdf", "publicationDate"]
 
-    for part in range(1, 5):
+    for part in range(1, total_parts + 1):
         file_path = f"{base_file_path}{part}.json"
         output_path = f"{base_file_destination}{part}.json"
         logger.info(f"Processing file: {file_path}")
