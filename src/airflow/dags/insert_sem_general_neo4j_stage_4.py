@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-from utils.databases import insert_into_neo4j
+from utils.databases import insert_sem_general_neo4j
 
 default_args = {
     'owner': 'airflow',
@@ -14,17 +14,17 @@ default_args = {
 }
 
 queries_directory = '/opt/airflow/neo4j/queries'
-base_input_path = '/opt/airflow/staging_area/arxiv_enriched_part_'
+base_input_path = '/opt/airflow/staging_area/arxiv_enriched_sem_general_part_'
 
-with DAG('insert_into_neo4j_stage_4',
+with DAG('insert_sem_general_neo4j_stage_4',
          default_args=default_args,
-         description='DAG to insert preprocessed and enriched data into Neo4j graph database',
+         description='DAG to insert preprocessed and enriched w/ general Semantic Scholar data into Neo4j graph database',
          schedule_interval=None,  # Manually triggered or triggered by sensor
          catchup=False) as dag:
 
-    insert_into_neo4j = PythonOperator(task_id='insert_into_neo4j',
-                        python_callable=insert_into_neo4j,
+    insert_sem_general_neo4j = PythonOperator(task_id='insert_sem_general_neo4j',
+                        python_callable=insert_sem_general_neo4j,
                         op_args=[queries_directory, base_input_path],
                         provide_context=True)
 
-    insert_into_neo4j
+    insert_sem_general_neo4j

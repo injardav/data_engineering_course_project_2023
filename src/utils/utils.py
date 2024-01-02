@@ -86,7 +86,6 @@ def handle_authors(df, logger):
         df['authors'] = df['authors'].apply(transform_author_field)
     except Exception as e:
         logger.error(f"Error in handle_authors: {e}")
-    
 
 def get_total_rows(file_path):
     count = 0

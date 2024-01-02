@@ -1,6 +1,6 @@
-import uuid, os, pandas as pd
+import re, os, pandas as pd
+from datetime import datetime
 from neo4j import GraphDatabase
-from utils.utils import validate_row
 
 class Neo4jConnector:
     def __init__(self, uri, user, password):
@@ -45,7 +45,7 @@ def load_and_execute_queries(directory, neo4j_connector, logger):
             logger.info(f"Executing query from file: {filename}")
             neo4j_connector.execute_file(file_path)
 
-def process_batch(df_batch, neo4j_connector, logger):
+def process_sem_general(df_batch, neo4j_connector, logger):
     logger.info(f"Starting to process batch of length {len(df_batch)}")
     batch_data = df_batch.to_dict('records')
     author_uuids = {}
@@ -53,56 +53,47 @@ def process_batch(df_batch, neo4j_connector, logger):
     references_data = []
     versions_data = []
 
+    def convert_to_iso_format(date_str):
+        # Assuming the date is in a format like "Mon, 2 Apr 2007 19:18:42 GMT"
+        # Adjust the format string according to your actual date format
+        try:
+            date_obj = datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S GMT')
+            return date_obj.isoformat()
+        except ValueError:
+            # Handle the error or return the original string if conversion fails
+            return date_str
+        
+    def clean_text(text):
+        # Remove newline characters
+        text = text.replace('\n', ' ').replace('\r', ' ')
+
+        # Replace multiple spaces with a single space
+        text = re.sub(r'\s+', ' ', text)
+
+        text = text.strip()
+        return text
+
     for row_index, row in enumerate(batch_data):
         try:
-            # Begin by validating the data to meet certain format
-            row = validate_row(row)
+            # Update names
+            for author in row.get('authors_parsed', []):
+                row['author']['first_name'] = author[0]
+                row['author']['last_name'] = author[1]
 
-            # Process Journal
-            row['journal_name'] = row.get('journal', {}).get('name')
-            row['journal_pages'] = row.get('journal', {}).get('pages')
-            row['journal_volume'] = row.get('journal', {}).get('volume')
+            # Convert date to a standard format
+            if row.get('update_date'):
+                row['update_date'] = convert_to_iso_format(row['update_date'])
+            
+            # Clean up text fields
+            for field in ['comments']:
+                if row.get(field):
+                    row[field] = clean_text(row[field])
 
-            # Process ISSN Type
-            ISSN_type = row.get('ISSN_type', [])
-            row['ISSN_type_values'] = [item.get('value') for item in ISSN_type]
-            row['ISSN_type_types'] = [item.get('type') for item in ISSN_type]
+            # Handle null values
+            for field in ['license', 'journal_ref', 'doi']:
+                if field not in row or row[field] is None:
+                    row[field] = 'Unknown'  # or some other default value
 
-            # Process authors
-            authors = row.get('authors', [])
-            for author in authors:
-                author_key = author.get('name')
-                if author_key not in author_uuids:
-                    author_uuids[author_key] = str(uuid.uuid4())
-
-                author_data = {
-                    'publication_id': row.get('id'),
-                    'author_id': author_uuids[author_key],
-                    'name': author_key
-                }
-                authors_data.append(author_data)
-
-            # Process references
-            references = row.get('references', [])
-            for reference in references:
-                reference_data = {
-                    'publication_id': row.get('id'),
-                    'ref_doi': reference.get('DOI'),
-                    'ref_key': reference.get('key'),
-                    'ref_doi_asserted_by': reference.get('doi-asserted-by')
-                }
-                references_data.append(reference_data)
-
-            # Process versions
-            versions = row.get('versions', [])
-            for version in versions:
-                version_data = {
-                    'publication_id': row.get('id'),
-                    'version_id': str(uuid.uuid4()),
-                    'created_time': version.get('created'),
-                    'version': version.get('version')
-                }
-                versions_data.append(version_data)
 
         except Exception as e:
             logger.error(f"Error processing row index {row_index} with ID {row.get('id', 'Unknown ID')}: {e}")
@@ -111,8 +102,8 @@ def process_batch(df_batch, neo4j_connector, logger):
     try:
         versions_query = """
             UNWIND $versions_data AS ver        
-            CREATE (:PublicationVersion {
-                publication_id: ver.publication_id,
+            CREATE (:Version {
+                id: ver.id,
                 version_id: ver.version_id,
                 created_time: ver.created_time,
                 version: ver.version
@@ -125,7 +116,7 @@ def process_batch(df_batch, neo4j_connector, logger):
             UNWIND $authors_data AS author
             CREATE (:Author {
                 author_id: author.author_id,
-                publication_id: author.publication_id,
+                id: author.id,
                 name: author.name
             })
         """
@@ -135,7 +126,7 @@ def process_batch(df_batch, neo4j_connector, logger):
         references_query = """
             UNWIND $references_data AS ref
             CREATE(:ReferencedPublication {
-                publication_id: ref.publication_id,
+                id: ref.id,
                 ref_doi: ref.ref_doi,
                 ref_key: ref.ref_key,
                 ref_doi_asserted_by: ref.ref_doi_asserted_by
@@ -146,22 +137,16 @@ def process_batch(df_batch, neo4j_connector, logger):
 
         publications_query = """
             UNWIND $batch AS row
-            CREATE (:Publication {
-                publication_id: row.id,
-                submitter: row.submitter,
-                article_number: row.article_number,
-                title: row.title,
-                journal_ref: row.journal,
-                general_category: row.general_category,
-                type: row.type,
-                issue: row.issue,
-                language: row.language,
-                short_container_title: row.short_container_title,
-                container_title: row.container_title,
-                is_referenced_by_count: row.is_referenced_by_count,
-                is_current: row.is_current,
-                start_date: null,
-                end_date: null
+            CREATE (:Paper {
+                id: row.id,
+                arxiv: row.arxiv,
+                comments: row.comments,
+                journal_ref: row.comments,
+                doi: row.doi,
+                report_no: row.report_no,
+                license: row.license,
+                update_date: row.update_date,
+                general_category: row.general_category
             })
         """
         logger.info("Executing publications query")
@@ -170,7 +155,7 @@ def process_batch(df_batch, neo4j_connector, logger):
         journal_query = """
             UNWIND $batch AS row
             CREATE (:Journal {
-                publication_id: row.id,
+                id: row.id,
                 name: row.journal_name,
                 pages: row.journal_pages,
                 volume: row.journal_volume,
@@ -184,7 +169,7 @@ def process_batch(df_batch, neo4j_connector, logger):
         auth_affiliations_query = """
             UNWIND $batch AS row
             CREATE (:Affiliation {
-                publication_id: row.id,
+                id: row.id,
                 affiliation: row.affiliation,
                 is_current: row.is_current,
                 start_date: null,
@@ -197,7 +182,7 @@ def process_batch(df_batch, neo4j_connector, logger):
         publishers_query = """
             UNWIND $batch AS row
             CREATE (:Publisher {
-                publication_id: row.id,
+                id: row.id,
                 publisher_name: row.publisher
             })
         """
@@ -207,7 +192,7 @@ def process_batch(df_batch, neo4j_connector, logger):
         PublisherSerialNumber_query = """
             UNWIND $batch AS row
             CREATE (:PublisherSerialNumber {
-                publication_id: row.id,
+                id: row.id,
                 issn_values: row.ISSN_type_values,
                 issn_types: row.ISSN_type_types
             })
@@ -218,7 +203,7 @@ def process_batch(df_batch, neo4j_connector, logger):
         licenses_query = """
             UNWIND $batch AS row
             CREATE (:License {
-                publication_id: row.id,
+                id: row.id,
                 license_start: row.license_start,
                 license_url: row.license_url,
                 license_content_version: row.license_content_version,
@@ -231,7 +216,7 @@ def process_batch(df_batch, neo4j_connector, logger):
         facts_query = """
             UNWIND $batch AS row
             CREATE (:PublicationMetrics {
-                publication_id: row.id,
+                id: row.id,
                 references_count: row.references_count,
                 score: row.score,
                 doi: row.doi,
@@ -243,8 +228,8 @@ def process_batch(df_batch, neo4j_connector, logger):
 
         relationships_query_1 = """
             UNWIND $batch AS row
-            MATCH (pub:Publication {publication_id: row.id})
-            MATCH (auth:Author {publication_id: row.id})
+            MATCH (pub:Paper {id: row.id})
+            MATCH (auth:Author {id: row.id})
             CREATE (pub)-[:AUTHORED_BY]->(auth)
         """
         logger.info("Executing relationships query 1")
@@ -252,8 +237,8 @@ def process_batch(df_batch, neo4j_connector, logger):
 
         relationships_query_2 = """
             UNWIND $batch AS row
-            MATCH (auth:Author {publication_id: row.id})
-            MATCH (aff:Affiliation {publication_id: row.id})
+            MATCH (auth:Author {id: row.id})
+            MATCH (aff:Affiliation {id: row.id})
             CREATE (auth)-[:AFFILIATED_WITH]->(aff)
         """
         logger.info("Executing relationships query 2")
@@ -261,7 +246,7 @@ def process_batch(df_batch, neo4j_connector, logger):
 
         relationships_query_3 = """
             UNWIND $batch AS row
-            MATCH (serial:PublisherSerialNumber {publication_id: row.id})
+            MATCH (serial:PublisherSerialNumber {id: row.id})
             CREATE (pub)-[:HAS_ISSN]->(serial)
         """
         logger.info("Executing relationships query 3")
@@ -269,7 +254,7 @@ def process_batch(df_batch, neo4j_connector, logger):
 
         relationships_query_4 = """
             UNWIND $batch AS row
-            MATCH (lic:License {publication_id: row.id})
+            MATCH (lic:License {id: row.id})
             CREATE (pub)-[:HAS_LICENSE]->(lic)
         """
         logger.info("Executing relationships query 4")
@@ -277,7 +262,7 @@ def process_batch(df_batch, neo4j_connector, logger):
 
         relationships_query_5 = """
             UNWIND $batch AS row
-            MATCH (ref:ReferencedPublication {publication_id: row.id})
+            MATCH (ref:ReferencedPublication {id: row.id})
             CREATE (pub)-[:HAS_REFERENCE]->(ref)
         """
         logger.info("Executing relationships query 5")
@@ -285,7 +270,7 @@ def process_batch(df_batch, neo4j_connector, logger):
         
         relationships_query_6 = """
             UNWIND $batch AS row
-            MATCH (ver:PublicationVersion {publication_id: row.id})
+            MATCH (ver:Version {id: row.id})
             CREATE (pub)-[:HAS_VERSION]->(ver)
         """
         logger.info("Executing relationships query 6")
@@ -294,7 +279,7 @@ def process_batch(df_batch, neo4j_connector, logger):
         relationships_query_7 = """
             UNWIND $batch AS row
             MATCH (fact:PublicationMetrics {doi: row.doi})
-            MATCH (pub:Publication {doi: row.doi})
+            MATCH (pub:Paper {doi: row.doi})
             CREATE (fact)-[:BASED_ON_PUBLICATION]->(pub)
         """
         logger.info("Executing relationships query 7")
@@ -305,25 +290,28 @@ def process_batch(df_batch, neo4j_connector, logger):
     except Exception as e:
         logger.error(f"Error executing Neo4j queries: {e}")
 
-def insert_into_neo4j(queries_directory, base_input_path, batch_size=500, **kwargs):
+def process_sem_additional(df_batch, neo4j_connector, logger):
+    ...
+
+def insert_sem_general_neo4j(queries_directory, base_input_path, batch_size=500, **kwargs):
     NEO4J_URI = "bolt://neo4j:7687"
     NEO4J_USER = "neo4j"
     NEO4J_PASSWORD = "project_pass123"
     part_count = 4
 
     indexes_to_create = [
-        ("Publication", "publication_id"),
-        ("Author", "publication_id"),
-        ("Affiliation", "publication_id"),
-        ("PublisherSerialNumber", "publication_id"),
-        ("License", "publication_id"),
-        ("ReferencedPublication", "publication_id"),
-        ("PublicationVersion", "publication_id"),
+        ("Paper", "id"),
+        ("Author", "id"),
+        ("Affiliation", "id"),
+        ("PublisherSerialNumber", "id"),
+        ("License", "id"),
+        ("ReferencedPublication", "id"),
+        ("Version", "id"),
         ("PublicationMetrics", "doi")
     ]
 
     logger = kwargs['ti'].log
-    logger.info("Starting the Neo4j data processing")
+    logger.info("Starting the Neo4j data processing sem general")
 
     with Neo4jConnector(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD) as neo4j_connector:
         load_and_execute_queries(queries_directory, neo4j_connector, logger)
@@ -346,11 +334,38 @@ def insert_into_neo4j(queries_directory, base_input_path, batch_size=500, **kwar
                     end = start + batch_size
                     logger.info(f"Processing batch from row {start} to {end}")
                     df_batch = df.iloc[start:end]
-                    process_batch(df_batch, neo4j_connector, logger)
+                    process_sem_general(df_batch, neo4j_connector, logger)
             else:
                 logger.warning(f"File not found: {input_path}")
 
     logger.info("Completed processing all parts")
 
-def insert_into_postgres(**kwargs):
-    ...
+def insert_sem_additional_neo4j(base_input_path, batch_size=500, **kwargs):
+    NEO4J_URI = "bolt://neo4j:7687"
+    NEO4J_USER = "neo4j"
+    NEO4J_PASSWORD = "project_pass123"
+    part_count = 4
+
+    logger = kwargs['ti'].log
+    logger.info("Starting the Neo4j data processing sem additional")
+
+    with Neo4jConnector(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD) as neo4j_connector:
+        for part in range(1, part_count + 1):
+            input_path = f"{base_input_path}{part}.json"
+            logger.info(f"Checking for the existence of {input_path}")
+
+            if os.path.exists(input_path):
+                logger.info(f"Processing file: {input_path}")
+                df = pd.read_json(input_path, orient='records', lines=True)
+                total_rows = len(df)
+                logger.info(f"Total rows in dataframe: {total_rows}")
+                
+                for start in range(0, total_rows, batch_size):
+                    end = start + batch_size
+                    logger.info(f"Processing batch from row {start} to {end}")
+                    df_batch = df.iloc[start:end]
+                    process_sem_additional(df_batch, neo4j_connector, logger)
+            else:
+                logger.warning(f"File not found: {input_path}")
+
+    logger.info("Completed processing all parts")

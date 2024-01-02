@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-from utils.databases import insert_into_postgres
+from utils.databases import insert_sem_additional_neo4j
 
 default_args = {
     'owner': 'airflow',
@@ -13,14 +13,17 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-with DAG('insert_into_postgres_stage_4',
+base_input_path = '/opt/airflow/staging_area/arxiv_enriched_sem_additional_part_'
+
+with DAG('insert_sem_additional_neo4j_stage_6',
          default_args=default_args,
-         description='DAG to insert preprocessed and enriched data into postgres DWH',
+         description='DAG to insert preprocessed and enriched w/ additional Semantic Scholar data into Neo4j graph database',
          schedule_interval=None,  # Manually triggered or triggered by sensor
          catchup=False) as dag:
 
-    insert_into_postgres = PythonOperator(task_id='insert_into_postgres',
-                        python_callable=insert_into_postgres,
+    insert_sem_additional_neo4j = PythonOperator(task_id='insert_sem_additional_neo4j',
+                        python_callable=insert_sem_additional_neo4j,
+                        op_args=[base_input_path],
                         provide_context=True)
 
-    insert_into_postgres
+    insert_sem_additional_neo4j

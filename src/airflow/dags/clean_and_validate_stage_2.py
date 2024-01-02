@@ -36,9 +36,9 @@ with DAG('clean_and_validate_stage_2',
         provide_context=True
     )
 
-    run_enrichment = TriggerDagRunOperator(
-        task_id='trigger_enrichment',
-        trigger_dag_id='enrich_stage_3',
+    run_sem_general_enrichment = TriggerDagRunOperator(
+        task_id='trigger_sem_general_enrichment',
+        trigger_dag_id='enrich_sem_general_stage_3',
     )
 
-    clean_and_validate >> delete >> run_enrichment
+    clean_and_validate >> delete >> run_sem_general_enrichment
