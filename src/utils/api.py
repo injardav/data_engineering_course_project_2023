@@ -177,5 +177,5 @@ def consume_semantic_scholar(base_file_path, base_file_destination, **kwargs):
             logger.info(f"Completed processing batch {batch_index + 1}/{len(batches)}")
 
         # Save the processed subset
-        df.to_json(output_path, orient='records', lines=True)
+        df.to_json(output_path, orient='records', lines=True, force_ascii=False)
         logger.info(f"Enriched data saved to: {output_path}")

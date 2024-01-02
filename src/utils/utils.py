@@ -154,5 +154,5 @@ def clean_and_validate_dataset(file_path, **kwargs):
 
         # Save the processed subset
         output_path = f"{base_output_path}{part}.json"
-        df.to_json(output_path, orient='records', lines=True)
+        df.to_json(output_path, orient='records', lines=True, force_ascii=False)
         logger.info(f"Subset {part} of DataFrame saved to {output_path}")
